@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOC Dashboard - SentinelDLP AI</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand-header">
+        <div class="brand-icon"><i class="fas fa-shield-halved"></i></div>
+        <div class="brand-text">
+          <h5 class="mb-0 text-white fw-bold">SentinelDLP</h5>
+          <span class="small text-muted" style="font-size: 0.72rem;">AI THREAT PLATFORM</span>
+        </div>
+      </div>
+      <ul class="nav-links">
+        <li class="nav-link-item active"><a href="/dashboard"><i class="fas fa-chart-pie fa-fw"></i> <span class="nav-text">SOC Dashboard</span></a></li>
+        <li class="nav-link-item"><a href="/alerts"><i class="fas fa-bell fa-fw"></i> <span class="nav-text">Live Alerts</span></a></li>
+        <li class="nav-link-item"><a href="/alert-history"><i class="fas fa-clock-rotate-left fa-fw"></i> <span class="nav-text">Alert History</span></a></li>
+        <li class="nav-link-item"><a href="/incidents"><i class="fas fa-biohazard fa-fw"></i> <span class="nav-text">Incidents</span></a></li>
+        <li class="nav-link-item"><a href="/employees"><i class="fas fa-users-gear fa-fw"></i> <span class="nav-text">Endpoints & UEBA</span></a></li>
+        <li class="nav-link-item"><a href="/files"><i class="fas fa-folder-tree fa-fw"></i> <span class="nav-text">File Data Lake</span></a></li>
+        <li class="nav-link-item"><a href="/reports"><i class="fas fa-file-invoice fa-fw"></i> <span class="nav-text">Compliance Reports</span></a></li>
+        <li class="nav-link-item"><a href="/settings"><i class="fas fa-sliders fa-fw"></i> <span class="nav-text">DLP Policies</span></a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <div class="d-flex align-items-center gap-2 user-text">
+          <div class="avatar rounded-circle bg-info text-dark fw-bold d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; font-size: 0.8rem;">
+            <i class="fas fa-user-shield"></i>
+          </div>
+          <div>
+            <div class="small fw-bold text-white current-user-name">Analyst</div>
+            <div class="text-muted" style="font-size: 0.7rem;" class="current-user-role">SOC_ADMIN</div>
+          </div>
+        </div>
+        <a href="#" class="text-danger btn-logout" title="Sign Out"><i class="fas fa-right-from-bracket"></i></a>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Topbar -->
+      <div class="topbar">
+        <div>
+          <h1 class="h4 text-white fw-bold mb-1">Security Operations Center</h1>
+          <p class="small text-muted mb-0">Endpoint Telemetry, File Classifications & Insider Threat Detection</p>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+          <a href="/employee-portal" class="btn btn-sm btn-outline-info">
+            <i class="fas fa-laptop me-1"></i> Employee Portal View
+          </a>
+          <button class="btn btn-sm btn-cyan" onclick="loadDashboardData()">
+            <i class="fas fa-arrows-rotate me-1"></i> Refresh Live Feed
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI Stats Grid -->
+      <div class="kpi-grid">
+        <div class="glass-card kpi-card">
+          <div class="kpi-icon bg-info bg-opacity-25 text-info"><i class="fas fa-desktop"></i></div>
+          <div>
+            <div class="kpi-value" id="kpi-total-employees">0</div>
+            <div class="kpi-label">Total Endpoints</div>
+          </div>
+        </div>
+
+        <div class="glass-card kpi-card">
+          <div class="kpi-icon bg-success bg-opacity-25 text-success"><i class="fas fa-wifi"></i></div>
+          <div>
+            <div class="kpi-value" id="kpi-online-employees">0</div>
+            <div class="kpi-label">Online Agents</div>
+          </div>
+        </div>
+
+        <div class="glass-card kpi-card">
+          <div class="kpi-icon bg-warning bg-opacity-25 text-warning"><i class="fas fa-file-shield"></i></div>
+          <div>
+            <div class="kpi-value" id="kpi-sensitive-files">0</div>
+            <div class="kpi-label">Sensitive Files</div>
+          </div>
+        </div>
+
+        <div class="glass-card kpi-card">
+          <div class="kpi-icon bg-danger bg-opacity-25 text-danger"><i class="fas fa-triangle-exclamation"></i></div>
+          <div>
+            <div class="kpi-value" id="kpi-open-alerts">0</div>
+            <div class="kpi-label">Open Alerts</div>
+          </div>
+        </div>
+
+        <div class="glass-card kpi-card">
+          <div class="kpi-icon bg-danger bg-opacity-50 text-white"><i class="fas fa-radiation"></i></div>
+          <div>
+            <div class="kpi-value" id="kpi-critical-alerts">0</div>
+            <div class="kpi-label">Critical Threats</div>
+          </div>
+        </div>
+
+        <div class="glass-card kpi-card">
+          <div class="kpi-icon bg-primary bg-opacity-25 text-primary"><i class="fas fa-shield-virus"></i></div>
+          <div>
+            <div class="kpi-value" id="kpi-active-incidents">0</div>
+            <div class="kpi-label">Active Incidents</div>
+          </div>
+        </div>
+
+        <div class="glass-card kpi-card">
+          <div class="kpi-icon bg-purple bg-opacity-25 text-purple" style="background: rgba(139, 92, 246, 0.2); color: #a78bfa;"><i class="fas fa-gauge-high"></i></div>
+          <div>
+            <div class="kpi-value" id="kpi-avg-risk">0.0</div>
+            <div class="kpi-label">Fleet Avg Risk</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SOC Visualizations Row -->
+      <div class="row g-4 mb-4">
+        <div class="col-lg-4">
+          <div class="glass-panel p-3 h-100">
+            <h6 class="text-white fw-bold mb-3"><i class="fas fa-chart-pie text-info me-2"></i>Risk Level Distribution</h6>
+            <div style="height: 220px; position: relative;">
+              <canvas id="chart-risk-dist"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-4">
+          <div class="glass-panel p-3 h-100">
+            <h6 class="text-white fw-bold mb-3"><i class="fas fa-chart-bar text-warning me-2"></i>Alerts by Severity</h6>
+            <div style="height: 220px; position: relative;">
+              <canvas id="chart-alerts-sev"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-4">
+          <div class="glass-panel p-3 h-100">
+            <h6 class="text-white fw-bold mb-3"><i class="fas fa-database text-purple me-2"></i>Files by Classification</h6>
+            <div style="height: 220px; position: relative;">
+              <canvas id="chart-files-class"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tables Row: Top Risk Endpoints & Recent Alerts -->
+      <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+          <div class="glass-panel p-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="text-white fw-bold mb-0"><i class="fas fa-user-ninja text-danger me-2"></i>Top At-Risk Endpoints (UEBA)</h6>
+              <a href="/employees" class="small text-info text-decoration-none">View Fleet <i class="fas fa-arrow-right"></i></a>
+            </div>
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Endpoint</th>
+                    <th>Hostname</th>
+                    <th>Risk Score</th>
+                    <th>Alerts</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="table-top-employees">
+                  <!-- Populated dynamically via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="glass-panel p-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="text-white fw-bold mb-0"><i class="fas fa-bolt text-warning me-2"></i>Live Threat Alert Stream</h6>
+              <a href="/alerts" class="small text-info text-decoration-none">All Alerts <i class="fas fa-arrow-right"></i></a>
+            </div>
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Endpoint</th>
+                    <th>Alert</th>
+                    <th>Severity</th>
+                    <th>Risk</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="table-recent-alerts">
+                  <!-- Populated dynamically via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity Timeline Stream -->
+      <div class="glass-panel p-3">
+        <h6 class="text-white fw-bold mb-3"><i class="fas fa-timeline text-info me-2"></i>Real-time File & Process Activity Feed</h6>
+        <div id="timeline-recent-activity">
+          <!-- Populated dynamically via JS -->
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/auth.js"></script>
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

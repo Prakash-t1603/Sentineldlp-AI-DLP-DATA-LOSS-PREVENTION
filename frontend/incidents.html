@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Incidents - SentinelDLP AI</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand-header">
+        <div class="brand-icon"><i class="fas fa-shield-halved"></i></div>
+        <div class="brand-text">
+          <h5 class="mb-0 text-white fw-bold">SentinelDLP</h5>
+          <span class="small text-muted" style="font-size: 0.72rem;">AI THREAT PLATFORM</span>
+        </div>
+      </div>
+      <ul class="nav-links">
+        <li class="nav-link-item"><a href="/dashboard"><i class="fas fa-chart-pie fa-fw"></i> <span class="nav-text">SOC Dashboard</span></a></li>
+        <li class="nav-link-item"><a href="/alerts"><i class="fas fa-bell fa-fw"></i> <span class="nav-text">Live Alerts</span></a></li>
+        <li class="nav-link-item"><a href="/alert-history"><i class="fas fa-clock-rotate-left fa-fw"></i> <span class="nav-text">Alert History</span></a></li>
+        <li class="nav-link-item active"><a href="/incidents"><i class="fas fa-biohazard fa-fw"></i> <span class="nav-text">Incidents</span></a></li>
+        <li class="nav-link-item"><a href="/employees"><i class="fas fa-users-gear fa-fw"></i> <span class="nav-text">Endpoints & UEBA</span></a></li>
+        <li class="nav-link-item"><a href="/files"><i class="fas fa-folder-tree fa-fw"></i> <span class="nav-text">File Data Lake</span></a></li>
+        <li class="nav-link-item"><a href="/reports"><i class="fas fa-file-invoice fa-fw"></i> <span class="nav-text">Compliance Reports</span></a></li>
+        <li class="nav-link-item"><a href="/settings"><i class="fas fa-sliders fa-fw"></i> <span class="nav-text">DLP Policies</span></a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <div class="d-flex align-items-center gap-2 user-text">
+          <div class="avatar rounded-circle bg-info text-dark fw-bold d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; font-size: 0.8rem;">
+            <i class="fas fa-user-shield"></i>
+          </div>
+          <div>
+            <div class="small fw-bold text-white current-user-name">Analyst</div>
+            <div class="text-muted" style="font-size: 0.7rem;" class="current-user-role">SOC_ADMIN</div>
+          </div>
+        </div>
+        <a href="#" class="text-danger btn-logout" title="Sign Out"><i class="fas fa-right-from-bracket"></i></a>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <div class="topbar">
+        <div>
+          <h1 class="h4 text-white fw-bold mb-1">Incident Response & Containment</h1>
+          <p class="small text-muted mb-0">Track active security cases, forensic notes, containment status, and resolution</p>
+        </div>
+        <div>
+          <button class="btn btn-cyan" data-bs-toggle="modal" data-bs-target="#createIncidentModal">
+            <i class="fas fa-plus me-1"></i> Open Incident Case
+          </button>
+        </div>
+      </div>
+
+      <!-- Filters Panel -->
+      <div class="glass-panel p-3 mb-4">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <select id="filter-inc-status" class="form-select form-control-dark">
+              <option value="">All Incident Statuses</option>
+              <option value="OPEN">OPEN</option>
+              <option value="INVESTIGATING">INVESTIGATING</option>
+              <option value="CONTAINED">CONTAINED</option>
+              <option value="RESOLVED">RESOLVED</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <select id="filter-inc-sev" class="form-select form-control-dark">
+              <option value="">All Severities</option>
+              <option value="CRITICAL">CRITICAL</option>
+              <option value="HIGH">HIGH</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="LOW">LOW</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Incidents Table -->
+      <div class="glass-panel p-3">
+        <div class="table-responsive">
+          <table class="table-custom">
+            <thead>
+              <tr>
+                <th>Created</th>
+                <th>Endpoint ID</th>
+                <th>Case Title & Details</th>
+                <th>Severity</th>
+                <th>Status</th>
+                <th>Assigned Analyst</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="incidents-table-body">
+              <!-- Populated dynamically via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Create Incident Modal -->
+  <div class="modal fade" id="createIncidentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content glass-panel border-secondary text-white" style="background: #111827;">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title fw-bold"><i class="fas fa-plus-circle text-info me-2"></i>Open New Security Incident</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form id="form-create-incident">
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="small text-muted">Endpoint Employee ID</label>
+              <input type="text" id="new-inc-emp" class="form-control form-control-dark" placeholder="e.g. EMP-WORKSTATION-01" required>
+            </div>
+            <div class="mb-3">
+              <label class="small text-muted">Incident Title</label>
+              <input type="text" id="new-inc-title" class="form-control form-control-dark" placeholder="e.g. Mass Confidential Document Download to Removable USB" required>
+            </div>
+            <div class="mb-3">
+              <label class="small text-muted">Severity</label>
+              <select id="new-inc-sev" class="form-select form-control-dark">
+                <option value="CRITICAL">CRITICAL</option>
+                <option value="HIGH" selected>HIGH</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="LOW">LOW</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="small text-muted">Description & Forensic Scope</label>
+              <textarea id="new-inc-desc" class="form-control form-control-dark" rows="3" placeholder="Provide details on suspect file operations, destination, or timeline..." required></textarea>
+            </div>
+          </div>
+          <div class="modal-footer border-secondary">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-cyan">Open Case</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Incident Investigation Modal -->
+  <div class="modal fade" id="incidentDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content glass-panel border-secondary text-white" style="background: #111827;">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title fw-bold"><i class="fas fa-file-shield text-info me-2"></i>Incident Investigation <span id="modal-inc-id"></span></h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3 mb-3">
+            <div class="col-md-8">
+              <label class="small text-muted">Incident Case</label>
+              <h5 class="text-white fw-bold mb-1" id="modal-inc-title"></h5>
+              <div class="text-muted small" id="modal-inc-desc"></div>
+            </div>
+            <div class="col-md-4 text-md-end">
+              <label class="small text-muted">Severity</label>
+              <div id="modal-inc-sev"></div>
+              <div class="small text-info mt-1">Endpoint: <strong id="modal-inc-emp"></strong></div>
+            </div>
+          </div>
+
+          <hr class="border-secondary">
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="small text-muted">Incident Lifecycle Status</label>
+              <select id="modal-inc-status" class="form-select form-control-dark">
+                <option value="OPEN">OPEN (Unassigned/New)</option>
+                <option value="INVESTIGATING">INVESTIGATING (Forensic triage active)</option>
+                <option value="CONTAINED">CONTAINED (Endpoint isolated / Access revoked)</option>
+                <option value="RESOLVED">RESOLVED (Mitigated & Closed)</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="small text-muted">Assigned Security Analyst</label>
+              <input type="text" id="modal-inc-assignee" class="form-control form-control-dark" placeholder="e.g. analyst@sentineldlp.io">
+            </div>
+            <div class="col-12">
+              <label class="small text-muted">Investigation Findings & Containment Notes</label>
+              <textarea id="modal-inc-notes" class="form-control form-control-dark" rows="4" placeholder="Enter findings, root cause analysis, evidence hashes, containment steps taken..."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-secondary">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-cyan" id="btn-save-incident">Update Incident</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/auth.js"></script>
+  <script src="/static/js/incidents.js"></script>
+</body>
+</html>
