@@ -9,9 +9,8 @@ from agent.config import (
     SUPPORTED_EXTENSIONS, IGNORE_DIRS, IGNORE_FILE_PREFIXES,
     IGNORE_FILE_SUFFIXES, EVENT_DEBOUNCE_SECONDS
 )
-from backend.services.file_analysis_service import file_analysis_service
-from backend.services.classifier_service import classifier_service
-from backend.utils.helpers import get_logger, compute_file_hash
+from agent.utils import compute_file_hash, read_text_preview
+from agent.logger import get_agent_logger as get_logger
 
 logger = get_logger("SentinelDLP.Agent.FileMonitor")
 
@@ -112,6 +111,7 @@ class DLPFileEventHandler(FileSystemEventHandler):
             if not filepath_obj.exists():
                 return
 
+            file_size = filepath_obj.stat().st_size if filepath_obj.exists() else 0
             file_hash = compute_file_hash(filepath_obj)
             if file_hash and self._is_recently_alerted(file_hash):
                 return
@@ -121,68 +121,41 @@ class DLPFileEventHandler(FileSystemEventHandler):
             win_title = fg_info.get("title", "")
             proc_name = fg_info.get("process_name", "")
 
-            # Perform classification
-            clf_result = classifier_service.classify_file(
-                filename=filepath_obj.name,
-                filepath=str(filepath_obj),
-                file_size=file_size,
-                extracted_text=extracted_text,
-                file_hash=file_hash
-            )
-
-            classification = clf_result.get("classification", "PUBLIC")
-            sensitivity_score = clf_result.get("sensitivity_score", 0.0)
-            entities = clf_result.get("detected_entities", [])
-            indicators = clf_result.get("indicators", [])
-
-            if entities:
-                entity_summary = ", ".join([f"{e['entity_type']} (x{e['count']})" for e in entities])
-            elif indicators:
-                entity_summary = ", ".join(indicators[:3])
-            else:
-                entity_summary = "Monitored Document"
-
             # Check if cloud sync folder destination (OneDrive, Dropbox, Google Drive)
             path_str_lower = str(filepath_obj).lower()
             is_cloud_folder = any(c in path_str_lower for c in ["onedrive", "google drive", "dropbox", "box sync", "icloud"])
-
             channel_info = self.agent.exfiltration_monitor.classify_target_channel(win_title, proc_name) if hasattr(self.agent, "exfiltration_monitor") else None
 
-            # Correlate sensitive file + active exfiltration channel
-            if (sensitivity_score >= 30.0 or classification in ["CONFIDENTIAL", "HIGHLY_CONFIDENTIAL"]):
-                if file_hash:
-                    self._recently_alerted[file_hash] = time.time()
-                risk_score = min(100.0, max(85.0, sensitivity_score + 10.0))
+            # Dispatch file to Central Server for OCR, NLP & Policy Evaluation
+            scan_res = self.agent.scan_file(filepath=filepath_obj, activity_type=activity_type, destination=destination)
 
-                if is_cloud_folder:
-                    self.agent.send_alert(
-                        alert_type="EXFILTRATION_CLOUD_SYNC",
-                        description=(
-                            f"🚨 REAL-TIME CLOUD EXFILTRATION: Sensitive file '{filepath_obj.name}' "
-                            f"({classification}, Score: {sensitivity_score}/100) placed in Cloud Sync Folder "
-                            f"'{filepath_obj.parent}'. Detected: [{entity_summary}]."
-                        ),
-                        severity="CRITICAL",
-                        risk_score=risk_score,
-                        source="FILE_MONITOR"
-                    )
-                elif channel_info:
-                    category = channel_info["category"]
-                    channel_name = channel_info["channel_name"]
-                    self.agent.send_alert(
-                        alert_type=f"EXFILTRATION_{category}",
-                        description=(
-                            f"🚨 REAL-TIME EXFILTRATION DETECTED: Sensitive file '{filepath_obj.name}' "
-                            f"({classification}, Score: {sensitivity_score}/100) accessed while {channel_name} "
-                            f"was active ('{win_title}' / {proc_name}). Detected: [{entity_summary}]."
-                        ),
-                        severity="CRITICAL",
-                        risk_score=risk_score,
-                        source="FILE_MONITOR"
-                    )
+            # Check if exfiltration channel correlation applies
+            if is_cloud_folder:
+                self.agent.send_alert(
+                    alert_type="EXFILTRATION_CLOUD_SYNC",
+                    description=f"File activity '{filepath_obj.name}' in Cloud Sync Folder '{filepath_obj.parent}'.",
+                    severity="HIGH",
+                    risk_score=70.0,
+                    source="FILE_MONITOR"
+                )
+            elif channel_info:
+                category = channel_info["category"]
+                channel_name = channel_info["channel_name"]
+                self.agent.send_alert(
+                    alert_type=f"EXFILTRATION_{category}",
+                    description=f"File '{filepath_obj.name}' accessed while {channel_name} was active ('{win_title}' / {proc_name}).",
+                    severity="HIGH",
+                    risk_score=75.0,
+                    source="FILE_MONITOR"
+                )
 
-            # Send file scan to backend
-            self.agent.scan_file(filepath=filepath_obj, activity_type=activity_type, destination=destination)
+            # Record telemetry
+            self.agent.send_activity_log(
+                activity_type=activity_type,
+                filepath=str(filepath_obj),
+                destination=destination or (str(filepath_obj.parent) if is_cloud_folder else None),
+                risk_score=15.0
+            )
 
         except Exception as e:
             logger.error(f"Error handling file event for {filepath_obj}: {e}")

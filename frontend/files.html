@@ -51,7 +51,10 @@
           <h1 class="h4 text-white fw-bold mb-1">Monitored File Data Lake & DLP Inspector</h1>
           <p class="small text-muted mb-0">Inspected document registry, OCR results, and AI sensitivity scores</p>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex align-items-center gap-2">
+          <button id="btn-delete-selected-files" class="btn btn-sm btn-danger d-none" onclick="deleteSelectedFiles()">
+            <i class="fas fa-trash-can me-1"></i> Delete Selected (<span id="files-selected-count">0</span>)
+          </button>
           <button class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#manualScanModal">
             <i class="fas fa-terminal me-1"></i> Scan Local Path
           </button>
@@ -85,16 +88,19 @@
       <!-- Files Table -->
       <div class="glass-panel p-3">
         <div class="table-responsive">
-          <table class="table-custom">
+          <table class="table-custom align-middle">
             <thead>
               <tr>
+                <th style="width: 40px;" class="text-center">
+                  <input type="checkbox" class="form-check-input bg-dark border-secondary" id="select-all-files" onchange="toggleSelectAllFiles(this.checked)" title="Select All Files">
+                </th>
                 <th>File Name & Path</th>
                 <th>Endpoint ID</th>
                 <th>Extension</th>
                 <th>Classification</th>
                 <th>Sensitivity Score</th>
                 <th>Last Modified</th>
-                <th>Action</th>
+                <th class="text-center">Action</th>
               </tr>
             </thead>
             <tbody id="files-table-body">

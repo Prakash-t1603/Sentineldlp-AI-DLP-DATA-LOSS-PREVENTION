@@ -122,8 +122,14 @@ def test_usb_file_transfer_sensitive_detection(tmp_path):
             self.alerts.append(kwargs)
         def send_activity_log(self, **kwargs):
             self.logs.append(kwargs)
-        def scan_file(self, filepath, activity_type="USB_COPY"):
+        def scan_file(self, filepath, activity_type="USB_COPY", destination=None, **kwargs):
             self.scanned.append((filepath, activity_type))
+            from backend.services.classifier_service import classifier_service
+            return classifier_service.classify_file(
+                filename=filepath.name,
+                filepath=str(filepath),
+                file_size=filepath.stat().st_size if filepath.exists() else 0
+            )
 
     agent = MockAgentWithAlerts()
     usb_drive_dir = tmp_path / "simulated_usb"
@@ -163,8 +169,14 @@ def test_usb_file_transfer_benign_no_alert(tmp_path):
             self.alerts.append(kwargs)
         def send_activity_log(self, **kwargs):
             self.logs.append(kwargs)
-        def scan_file(self, filepath, activity_type="USB_COPY"):
+        def scan_file(self, filepath, activity_type="USB_COPY", destination=None, **kwargs):
             self.scanned.append((filepath, activity_type))
+            from backend.services.classifier_service import classifier_service
+            return classifier_service.classify_file(
+                filename=filepath.name,
+                filepath=str(filepath),
+                file_size=filepath.stat().st_size if filepath.exists() else 0
+            )
 
     agent = MockAgentWithAlerts()
     usb_drive_dir = tmp_path / "simulated_usb"

@@ -11,10 +11,8 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 
 from agent.config import USB_POLL_INTERVAL_SECONDS, SUPPORTED_EXTENSIONS
-from backend.services.file_analysis_service import file_analysis_service
-from backend.services.classifier_service import classifier_service
-from backend.services.nlp_service import nlp_service
-from backend.utils.helpers import get_logger, compute_file_hash
+from agent.utils import compute_file_hash, read_text_preview
+from agent.logger import get_agent_logger as get_logger
 
 logger = get_logger("SentinelDLP.Agent.USBMonitor")
 
@@ -106,11 +104,9 @@ class USBFileTransferHandler(FileSystemEventHandler):
                     current_size = filepath.stat().st_size
                     if current_size > 0:
                         file_size = current_size
-                        extracted_text, _ = file_analysis_service.extract_text_from_file(filepath, max_retries=2)
-                        # For image files, if OCR produced text, or if file size is stable after multiple attempts, proceed
-                        if (is_img and extracted_text) or (not is_img and (extracted_text or current_size == last_size)):
-                            break
-                        if attempt >= 3 and current_size == last_size:
+                        if not is_img:
+                            extracted_text = read_text_preview(filepath)
+                        if (current_size == last_size and attempt >= 1) or extracted_text:
                             break
                     last_size = current_size
                 except (PermissionError, OSError):
@@ -127,34 +123,52 @@ class USBFileTransferHandler(FileSystemEventHandler):
 
             logger.info(f"⚡ USB File Activity intercepted: '{filepath.name}' ({file_size} bytes) on '{self.drive_path}'")
 
-            # Run Classification & Sensitive Entity Scan
-            clf_result = classifier_service.classify_file(
-                filename=filepath.name,
-                filepath=str(filepath),
-                file_size=file_size,
-                extracted_text=extracted_text,
-                file_hash=file_hash
-            )
+            # 1. Dispatch file scan to Central Server
+            scan_res = None
+            if hasattr(self.agent, "scan_file"):
+                scan_res = self.agent.scan_file(filepath=filepath, activity_type="USB_COPY", destination=self.drive_path)
 
-            classification = clf_result.get("classification", "PUBLIC")
-            sensitivity_score = clf_result.get("sensitivity_score", 0.0)
-            entities = clf_result.get("detected_entities", [])
-            indicators = clf_result.get("indicators", [])
+            classification = "PUBLIC"
+            sensitivity_score = 0.0
+            entities = []
+            indicators = []
+            doc_type = None
+
+            if isinstance(scan_res, dict):
+                classification = scan_res.get("classification", "PUBLIC")
+                sensitivity_score = float(scan_res.get("sensitivity_score", 0.0))
+                entities = scan_res.get("detected_entities", [])
+                indicators = scan_res.get("indicators", [])
+                doc_type = scan_res.get("document_type")
+            else:
+                # Lightweight endpoint-local text check for quick triage if server scan is pending
+                preview = read_text_preview(filepath)
+                if preview:
+                    from agent.clipboard_monitor import scan_clipboard_text
+                    ent, score, cls_name = scan_clipboard_text(preview)
+                    if ent:
+                        entities = ent
+                        sensitivity_score = score
+                        classification = cls_name
 
             # Format entity summary for alert
             if entities:
-                entity_summary = ", ".join([f"{e['entity_type']} (x{e['count']})" for e in entities])
+                entity_summary = ", ".join([f"{e['entity_type']} (x{e.get('count', 1)})" for e in entities])
             elif indicators:
                 entity_summary = ", ".join(indicators[:3])
             else:
-                entity_summary = "General Data Transfer"
+                entity_summary = "Removable Media Transfer"
+
+            # Centralized Policy & Risk Evaluation
+            sensitive_detected = sensitivity_score >= 30.0 or len(entities) > 0 or classification in ["CONFIDENTIAL", "HIGHLY_CONFIDENTIAL"]
+            risk_score = min(100.0, max(85.0, sensitivity_score + 10.0)) if sensitive_detected else max(5.0, sensitivity_score)
+            risk_level = "CRITICAL" if risk_score >= 80 else ("HIGH" if risk_score >= 60 else ("MEDIUM" if risk_score >= 30 else "LOW"))
+            action = "BLOCK" if risk_score >= 80 else ("WARN" if risk_score >= 30 else "ALLOW")
 
             # If sensitive or confidential, trigger CRITICAL real-time DLP alert
-            if sensitivity_score >= 30.0 or classification in ["CONFIDENTIAL", "HIGHLY_CONFIDENTIAL"]:
+            if sensitive_detected:
                 if file_hash:
                     self._recently_alerted[file_hash] = time.time()
-                risk_score = min(100.0, max(85.0, sensitivity_score + 10.0))
-                doc_type = clf_result.get("document_type")
                 target_desc = f"Image identified as '{doc_type}' ('{filepath.name}')" if doc_type else f"Sensitive file '{filepath.name}'"
 
                 alert_desc = (
@@ -165,24 +179,42 @@ class USBFileTransferHandler(FileSystemEventHandler):
                 )
                 logger.warning(f"CRITICAL USB EXFILTRATION: {target_desc} -> {self.drive_path}")
 
-                self.agent.send_alert(
-                    alert_type="EXFILTRATION_USB_TRANSFER",
-                    description=alert_desc,
-                    severity="CRITICAL",
+                if hasattr(self.agent, "send_alert"):
+                    self.agent.send_alert(
+                        alert_type="EXFILTRATION_USB_TRANSFER",
+                        description=alert_desc,
+                        severity="CRITICAL",
+                        risk_score=risk_score,
+                        source="USB_MONITOR"
+                    )
+
+            # Record unified DLP event
+            if hasattr(self.agent, "send_dlp_event"):
+                self.agent.send_dlp_event(
+                    channel="USB",
+                    application="USB Storage",
+                    file_name=filepath.name,
+                    destination=self.drive_path,
+                    file_hash=file_hash,
+                    file_size=file_size,
+                    file_type=suffix,
+                    sensitive_data_detected=sensitive_detected,
+                    detection_type="PII" if entities else ("CLASSIFIER" if sensitivity_score > 0 else "BENIGN"),
                     risk_score=risk_score,
-                    source="USB_MONITOR"
+                    risk_level=risk_level,
+                    action=action,
+                    status="BLOCKED" if action == "BLOCK" else ("WARNED" if action == "WARN" else "ALLOWED"),
+                    details=f"USB Copy: '{filepath.name}' to '{self.drive_path}'. [{entity_summary}]"
                 )
 
-                # Send file record to backend
-                self.agent.scan_file(filepath=filepath, activity_type="USB_COPY")
-
             # Always log telemetry activity
-            self.agent.send_activity_log(
-                activity_type="USB_COPY",
-                filepath=str(filepath),
-                destination=self.drive_path,
-                risk_score=sensitivity_score
-            )
+            if hasattr(self.agent, "send_activity_log"):
+                self.agent.send_activity_log(
+                    activity_type="USB_COPY",
+                    filepath=str(filepath),
+                    destination=self.drive_path,
+                    risk_score=sensitivity_score
+                )
 
         except Exception as e:
             logger.error(f"Error inspecting USB file {filepath}: {e}")

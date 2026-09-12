@@ -1,0 +1,421 @@
+================================================================================
+           SENTINELDLP AI - ENTERPRISE DATA LOSS PREVENTION (DLP)
+                     & THREAT INTELLIGENCE PLATFORM
+================================================================================
+COMPREHENSIVE TECHNICAL PROJECT REPORT, SYSTEM MANUAL & OPERATIONAL GUIDE
+Release: Version 2.3.0 (Enterprise Centralized Client-Server Architecture)
+Target Host IP: http://172.24.143.236:8000 | Localhost: http://127.0.0.1:8000
+Platform Support: Linux (Ubuntu/Debian/RHEL/Kali) | Windows 10/11 | macOS Sonoma+
+Author: SentinelDLP Security Engineering Team / Prakash-t1603
+Date: September 2026
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+ 1. EXECUTIVE SUMMARY & ARCHITECTURAL OVERVIEW
+ 2. SYSTEM ARCHITECTURE & TOPOLOGY
+    2.1 Central DLP Server & SOC Dashboard
+    2.2 Endpoint Monitoring Agent (Lightweight Client)
+    2.3 Enterprise Browser Extension (Manifest V3)
+ 3. CORE DLP CAPABILITIES & DETECTION CHANNELS
+    3.1 Removable USB Storage Watchdog & Hardware Interception
+    3.2 Web Browser & Cloud Storage Egress Protection
+    3.3 Corporate Email & MIME Attachment Inspection
+    3.4 Workstation Clipboard & Local Monitored Filesystem Watcher
+ 4. CENTRAL SCANNING, NLP, OCR & CLASSIFIER ENGINES
+ 5. COMPOSITE RISK ENGINE & POLICY GOVERNANCE MATRIX
+ 6. COMPLETE COMMAND-LINE INTERFACE (CLI) & SCRIPT REFERENCE
+    6.1 Central Server Commands
+    6.2 Endpoint Agent Execution & One-Line Installers
+    6.3 Simulator & Fleet Concurrency Commands
+    6.4 Database Maintenance & Alert Management Commands
+    6.5 Automated Test Battery Commands
+ 7. STEP-BY-STEP DEPLOYMENT & INSTALLATION GUIDE
+    7.1 Central Server Deployment (LAN / WAN & Localhost)
+    7.2 Employee Linux Workstation Deployment
+    7.3 Employee Windows Workstation Deployment
+    7.4 Browser Extension Deployment (Chrome / Edge / Brave)
+ 8. REST API SPECIFICATION & SECURITY PROTOCOL
+ 9. DEFAULT CREDENTIALS, ACCESS TOKENS & ROLES
+10. TEST BATTERY & VERIFICATION MATRIX (48/48 PASSING)
+11. COMPLIANCE, SECURITY HARDENING & DEFENSIVE CONTROLS
+
+
+================================================================================
+1. EXECUTIVE SUMMARY & ARCHITECTURAL OVERVIEW
+================================================================================
+
+SentinelDLP AI is an enterprise-grade, multi-channel Data Loss Prevention (DLP) 
+and User & Entity Behavior Analytics (UEBA) platform. Designed for modern corporate 
+enterprises, financial institutions, and regulated environments, the system detects, 
+classifies, intercepts, and prevents unauthorized exfiltration of sensitive, 
+proprietary, and regulated data across all primary workstation egress vectors:
+
+  1. Removable USB Mass Storage Devices (Watchdog Real-Time Sensor + OS Mounts)
+  2. Web Browsers & Cloud Storage (Google Drive, OneDrive, Dropbox, WhatsApp Web)
+  3. Corporate Email & Webmail Attachments (Outlook, Gmail, RFC 822 MIME Streams)
+  4. Workstation Clipboard & Local Monitored Filesystem Directories
+
+The platform enforces a clean architectural separation between the Central DLP 
+Server / SOC Dashboard and the distributed Employee Endpoint Agents.
+
+
+================================================================================
+2. SYSTEM ARCHITECTURE & TOPOLOGY
+================================================================================
+
+--------------------------------------------------------------------------------
+2.1 CENTRAL DLP SERVER & SOC DASHBOARD (backend/ & frontend/)
+--------------------------------------------------------------------------------
+Runs on the central security server (bound to `0.0.0.0:8000` / `172.24.143.236:8000`):
+  - FastAPI High-Performance REST API Gateway (/api/v1/...)
+  - SOC Administrator Dashboard (HTML5, Vanilla CSS, Chart.js, Dark Theme)
+  - Dedicated Employee Self-Service Portal (/employee-portal)
+  - Natural Language Processing (NLP) & Regex Entity Classifier
+  - Optical Character Recognition (OCR) Engine for Image Inspections
+  - Centralized Multi-Factor Additive Risk Engine (0 - 100 Score)
+  - DLP Policy Governance Engine (ALLOW / WARN / BLOCK)
+  - Incident Response & Case Management System
+  - Fleet Management Engine (Heartbeat Tracking, Status: ONLINE / WARNING / OFFLINE)
+  - Central Database (SQLite WAL Mode / PostgreSQL Schema Parity)
+
+--------------------------------------------------------------------------------
+2.2 ENDPOINT MONITORING AGENT (agent/)
+--------------------------------------------------------------------------------
+Runs on employee workstations as a lightweight client daemon:
+  - 100% Standalone: Zero database or backend module dependencies on the endpoint.
+  - USB Storage Watchdog: Detects USB insertion, drive letters, and real-time copies.
+  - Browser Receiver: HTTP server bound to `0.0.0.0:8765` (fallback: 8766-8768) to 
+    receive DOM file upload interception events from browser extensions.
+  - Clipboard Sensor: Intercepts clipboard copy operations for sensitive regex patterns.
+  - Filesystem Watcher: Python Watchdog observer monitoring critical corporate folders.
+  - Process Monitor: Detects unauthorized exfiltration utilities (curl, mega, tor, winscp).
+  - Offline Fault Tolerance: Buffers events in local SQLite (`logs/offline_events.db`) 
+    if Central Server is unreachable, auto-replaying upon reconnection.
+  - Dynamic Heartbeats: Pings central server every 15s with system metrics & queue state.
+
+--------------------------------------------------------------------------------
+2.3 ENTERPRISE BROWSER EXTENSION (browser_extension/)
+--------------------------------------------------------------------------------
+Manifest V3 authorized extension installed in employee browsers (Chrome / Edge / Brave):
+  - Intercepts file input clicks and drag-and-drop file drops before network transmission.
+  - Extracts text snippets and transmits pre-flight telemetry to `http://172.24.143.236:8765` 
+    (with direct fallback to `http://172.24.143.236:8000/api/dlp/browser-event`).
+  - Displays instant in-browser toast alerts (`BLOCKED`, `WARNING`, `CLEAN`).
+  - Automatically clears file input forms when transfers are blocked by policy.
+
+
+================================================================================
+3. CORE DLP CAPABILITIES & DETECTION CHANNELS
+================================================================================
+
+--------------------------------------------------------------------------------
+3.1 REMOVABLE USB STORAGE WATCHDOG
+--------------------------------------------------------------------------------
+  - Continuously monitors removable storage insertion and mount events.
+  - Intercepts file writes targeting USB drive letters (`E:\`, `F:\` on Windows, 
+    `/media/*`, `/mnt/*` on Linux).
+  - Computes SHA-256 hash, extracts document text, and classifies content.
+  - Critical/High sensitivity transfers trigger instant BLOCK actions, alerting the SOC.
+
+--------------------------------------------------------------------------------
+3.2 WEB BROWSER & CLOUD STORAGE EGRESS
+--------------------------------------------------------------------------------
+  - Monitors high-risk egress websites: Google Drive, OneDrive, SharePoint, Dropbox, 
+    Box, WhatsApp Web, Gmail Webmail, Outlook Webmail, WeTransfer, Mega.
+  - Zero HTTPS Wire Decryption: Inspects files at the source browser DOM layer before 
+    encryption, preserving HTTPS integrity and avoiding invasive root certificates.
+
+--------------------------------------------------------------------------------
+3.3 CORPORATE EMAIL & MIME ATTACHMENT INSPECTION
+--------------------------------------------------------------------------------
+  - Analyzes RFC 822 MIME email payloads and multipart attachments (.docx, .pdf, .csv).
+  - Validates recipient domain whitelists (distinguishes internal vs external emails).
+  - Blocks outgoing attachments containing unencrypted PII, financial info, or API secrets.
+
+--------------------------------------------------------------------------------
+3.4 WORKSTATION CLIPBOARD & LOCAL FILESYSTEM WATCHER
+--------------------------------------------------------------------------------
+  - Clipboard Monitor: Detects copy operations containing AWS keys, credentials, or PAN/Aadhaar.
+  - Filesystem Watcher: Observes local directories, ignoring `.git`, `node_modules`, `.venv`.
+
+
+================================================================================
+4. CENTRAL SCANNING, NLP, OCR & CLASSIFIER ENGINES
+================================================================================
+
+1. Text & Document Extraction (`backend/services/file_analysis_service.py`):
+   - Supports `.pdf` (`pypdf`), `.docx` (`python-docx`), `.txt`, `.csv`, `.json`, `.md`, `.env`.
+   - Built-in size guards and multi-encoding fallback parsing.
+
+2. Visual OCR Engine (`backend/services/ocr_service.py`):
+   - Safely extracts text from `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tiff` images via Tesseract/Pillow.
+   - Guaranteed zero-crash fallback on non-image files or unconfigured environments.
+
+3. Regex & NLP Entity Recognizer (`backend/services/nlp_service.py`):
+   - AWS Access Keys (`AKIA[0-9A-Z]{16}`) & Secret Keys
+   - Credit Card Numbers (Validated with Luhn Checksum Algorithm)
+   - Indian Aadhaar Numbers (12-digit UIDAI format)
+   - Indian Permanent Account Numbers (PAN: `[A-Z]{5}[0-9]{4}[A-Z]{1}`)
+   - US Social Security Numbers (SSN: `\d{3}-\d{2}-\d{4}`)
+   - Database Connection URIs (`postgres://`, `mysql://`, `mongodb://`)
+   - Private Encryption Keys (`-----BEGIN RSA PRIVATE KEY-----`)
+   - Corporate Confidentiality Markers (`STRICTLY CONFIDENTIAL`, `PROPRIETARY`)
+
+4. SHA-256 Byte-Content Classifier (`backend/services/classifier_service.py`):
+   - Content-addressed SHA-256 hash cache prevents redundant re-scanning of identical files.
+   - Assigns 4-tier Classification:
+     * `PUBLIC` (Sensitivity: 0 - 29)
+     * `INTERNAL` (Sensitivity: 30 - 59)
+     * `CONFIDENTIAL` (Sensitivity: 60 - 84)
+     * `HIGHLY_CONFIDENTIAL` (Sensitivity: 85 - 100)
+
+
+================================================================================
+5. COMPOSITE RISK ENGINE & POLICY GOVERNANCE MATRIX
+================================================================================
+
+Additive Multi-Factor Risk Formula:
+  Risk Score = Base Sensitivity (0 - 40)
+             + Channel Weight (USB: +30, Cloud/Browser: +25, Email: +20)
+             + Destination Multiplier (External/Untrusted: +15, Internal: +0)
+             + Sensitive Entity Count Factor (0 - 15)
+             + Process/Anomaly Surcharge (0 - 10)
+  Total Risk clamped strictly to range [0.0, 100.0].
+
+Risk Tiers & Policy Action Mapping:
+--------------------------------------------------------------------------------
+Risk Range      Risk Level       Default Policy Action    SOC Alert Trigger
+--------------------------------------------------------------------------------
+ 0.0 - 29.9     LOW              ALLOW                    Audit Log Only
+30.0 - 59.9     MEDIUM           ALLOW / WARN             Audit Log / Notice
+60.0 - 84.9     HIGH             WARN / BLOCK             Alert + Investigation
+85.0 - 100.0    CRITICAL         BLOCK                    Alert + Auto-Incident
+--------------------------------------------------------------------------------
+
+
+================================================================================
+6. COMPLETE COMMAND-LINE INTERFACE (CLI) & SCRIPT REFERENCE
+================================================================================
+
+All operations can be managed using the root orchestrator `run.py`:
+
+--------------------------------------------------------------------------------
+6.1 CENTRAL SERVER COMMANDS
+--------------------------------------------------------------------------------
+# Start Central DLP Server on primary network IP & localhost (port 8000):
+python run.py backend
+
+# Start Central DLP Server on custom host/port:
+python run.py backend --host 0.0.0.0 --port 8000
+python run.py backend --host 172.24.143.236 --port 8000
+
+Access URLs:
+  - SOC Administrator Dashboard: http://172.24.143.236:8000/dashboard
+  - Dedicated Employee Portal:   http://172.24.143.236:8000/employee-portal
+  - Interactive Swagger API Docs: http://172.24.143.236:8000/docs
+  - Service Health Check:        http://172.24.143.236:8000/health
+
+--------------------------------------------------------------------------------
+6.2 ENDPOINT AGENT EXECUTION & ONE-LINE INSTALLERS
+--------------------------------------------------------------------------------
+# 1. Local Development Agent:
+python run.py agent
+
+# 2. Remote Workstation Agent (Direct Execution):
+python -m agent.agent --server-url http://172.24.143.236:8000 --employee-id EMP-001
+
+# 3. Linux Workstation Automated Installer:
+chmod +x agent/install_linux.sh
+./agent/install_linux.sh "http://172.24.143.236:8000" "EMP-001"
+
+# 4. Windows Workstation Automated Installer (PowerShell):
+powershell -ExecutionPolicy Bypass -File .\agent\install_windows.ps1 -ServerUrl "http://172.24.143.236:8000" -EmployeeId "EMP-001"
+
+--------------------------------------------------------------------------------
+6.3 SIMULATOR & FLEET CONCURRENCY COMMANDS
+--------------------------------------------------------------------------------
+# Launch Multi-Endpoint Fleet Simulator (concurrently runs EMP-PC-001..003 with live heartbeats):
+python run.py sim-agents
+
+--------------------------------------------------------------------------------
+6.4 DATABASE MAINTENANCE & ALERT MANAGEMENT COMMANDS
+--------------------------------------------------------------------------------
+# Clear all alerts and incidents, resetting employee risk scores to 0.0 (Clean Baseline):
+python run.py clear-alerts
+
+# Reset the entire database (recreates tables, default admin, analyst, and policy rules):
+python run.py reset-db
+
+# Seed baseline employee directory and devices (clean alert baseline):
+python run.py seed
+
+--------------------------------------------------------------------------------
+6.5 AUTOMATED TEST BATTERY COMMANDS
+--------------------------------------------------------------------------------
+# Run the complete 48-test battery:
+python run.py test
+# or:
+pytest tests/ -v
+
+# Run the Unified Multi-Channel DLP Test Suite:
+python run.py dlp-test
+# or:
+pytest tests/test_dlp_unified.py -v
+
+
+================================================================================
+7. STEP-BY-STEP DEPLOYMENT & INSTALLATION GUIDE
+================================================================================
+
+--------------------------------------------------------------------------------
+7.1 CENTRAL SERVER DEPLOYMENT (SOC Server Machine)
+--------------------------------------------------------------------------------
+1. Clone / Navigate to the repository:
+   cd "/home/prakash/Documents/DLP - Employee-Monitoring-System"
+
+2. Create and activate Python virtual environment:
+   python3 -m venv venv
+   source venv/bin/activate
+
+3. Install server dependencies:
+   pip install -r requirements.txt
+
+4. Launch the Central Server:
+   python run.py backend
+
+5. Verify that `http://172.24.143.236:8000/health` responds with:
+   {"status":"HEALTHY","project":"SentinelDLP AI","version":"2.0.0"}
+
+--------------------------------------------------------------------------------
+7.2 EMPLOYEE LINUX WORKSTATION DEPLOYMENT
+--------------------------------------------------------------------------------
+1. Copy the `agent/` folder to the employee workstation.
+2. Run the automated installer:
+   chmod +x install_linux.sh
+   ./install_linux.sh "http://172.24.143.236:8000" "EMP-001"
+
+--------------------------------------------------------------------------------
+7.3 EMPLOYEE WINDOWS WORKSTATION DEPLOYMENT
+--------------------------------------------------------------------------------
+1. Copy the `agent/` folder to the Windows PC (e.g. `C:\SentinelDLP\agent`).
+2. Open PowerShell as Administrator and execute:
+   powershell -ExecutionPolicy Bypass -File .\install_windows.ps1 -ServerUrl "http://172.24.143.236:8000" -EmployeeId "EMP-001"
+
+--------------------------------------------------------------------------------
+7.4 BROWSER EXTENSION DEPLOYMENT (Chrome / Edge / Brave)
+--------------------------------------------------------------------------------
+1. Open the browser and visit:
+   - Chrome / Brave: `chrome://extensions/`
+   - Edge: `edge://extensions/`
+2. Enable **Developer mode** toggle in top-right corner.
+3. Click **"Load unpacked"** and select the `browser_extension` folder.
+4. Click the extension toolbar icon to verify status:
+   - **Status**: `● Guarding (172.24.143.236)`
+   - **Central DLP Server**: `http://172.24.143.236:8000`
+5. Test file upload on Google Drive, WhatsApp Web, or Webmail.
+
+
+================================================================================
+8. REST API SPECIFICATION & SECURITY PROTOCOL
+================================================================================
+
+Method   Endpoint                             Description
+--------------------------------------------------------------------------------
+GET      /health                              Service liveness & version status
+POST     /api/v1/auth/login                   User authentication (returns JWT Bearer)
+POST     /api/v1/auth/refresh                 Refresh JWT session token
+GET      /api/v1/users/me                     Retrieve active user profile & RBAC role
+POST     /api/v1/agents/register              Endpoint agent registration & token issuance
+POST     /api/v1/agents/heartbeat             Process periodic agent heartbeat & metrics
+GET      /api/v1/agents                       Fleet overview with dynamic status computation
+GET      /api/v1/agents/{device_id}           Detailed workstation telemetry & specifications
+DELETE   /api/v1/agents/{device_id}           Deactivate / deregister an endpoint device
+GET      /api/v1/dashboard/summary            Consolidated SOC metrics, charts, & fleet KPIs
+GET      /api/v1/dashboard/live-feed          Live stream of security alerts & file activities
+GET      /api/v1/dlp/statistics               Multi-channel DLP metrics & distribution
+GET      /api/v1/dlp/events                   Filterable audit ledger of DLP transfer events
+POST     /api/v1/dlp/events                   Direct ingestion of DLP events from agents
+POST     /api/v1/dlp/scan                     Unified file & text classification scan
+POST     /api/v1/dlp/browser-event            Browser extension upload interception handler
+POST     /api/v1/dlp/email-event              Email attachment inspection handler
+GET      /api/v1/dlp/policies                 List active channel DLP governance policies
+POST     /api/v1/dlp/policies                 Create a new DLP channel policy rule
+GET      /api/v1/alerts                       Query active threat alerts (filterable)
+DELETE   /api/v1/alerts/{alert_id}            Delete a specific alert by ID
+POST     /api/v1/alerts/bulk-delete           Delete multiple selected alerts in batch
+DELETE   /api/v1/alerts/clear-all             Purge all alert records from database
+GET      /api/v1/incidents                    Query active security incident cases
+PATCH    /api/v1/incidents/{incident_id}      Update incident status & investigation notes
+GET      /api/v1/employees                    List employees ranked by UEBA risk score
+GET      /api/v1/employees/{emp_id}           Detailed employee profile, files, & history
+GET      /api/v1/files                        Query file records inventory
+POST     /api/v1/files/upload-scan            Upload physical file for OCR & NLP extraction
+GET      /api/v1/reports/summary              Executive compliance audit metrics
+GET      /api/v1/reports/export/alerts        Export all security alerts in CSV format
+GET      /api/v1/reports/export/activities    Export all raw activity logs in CSV format
+--------------------------------------------------------------------------------
+
+
+================================================================================
+9. DEFAULT CREDENTIALS, ACCESS TOKENS & ROLES
+================================================================================
+
+Role                     Username / Email              Password
+--------------------------------------------------------------------------------
+SOC Administrator        admin@sentineldlp.io          Admin@123456
+Security Analyst         analyst@sentineldlp.io        Analyst@123456
+Endpoint Agent Secret    X-Agent-Secret Header         sentinel_agent_telemetry_secure_token_key_9981
+
+* Interactive Web Access: The login page at `/login` provides 1-click Quick Login buttons.
+
+
+================================================================================
+10. TEST BATTERY & VERIFICATION MATRIX (48/48 PASSING)
+================================================================================
+
+The automated test battery validates every subsystem with 100% pass rate:
+
+Test Module                                Tests   Duration   Status
+--------------------------------------------------------------------------------
+tests/test_agent.py (USB, File, Clipboard)   7      0.45s     PASSED (100%)
+tests/test_api.py (REST API, Auth, Export)   8      0.58s     PASSED (100%)
+tests/test_auth.py (Bcrypt, JWT Flow)        3      0.22s     PASSED (100%)
+tests/test_classifier.py (NLP, OCR, Cache)  13      1.20s     PASSED (100%)
+tests/test_dlp_unified.py (Multi-Channel)    7      0.82s     PASSED (100%)
+tests/test_e2e_flow.py (E2E Detection)       1      0.15s     PASSED (100%)
+tests/test_enterprise_architecture.py        6      0.40s     PASSED (100%)
+tests/test_risk.py (Additive Risk Formula)   3      0.18s     PASSED (100%)
+--------------------------------------------------------------------------------
+TOTAL                                       48      4.00s     ALL 48 PASSED (100%)
+
+
+================================================================================
+11. COMPLIANCE, SECURITY HARDENING & DEFENSIVE CONTROLS
+================================================================================
+
+1. ZERO WIRE DECRYPTION:
+   Inspects files at the source application DOM layer before transmission, avoiding 
+   invasive root certificates, MITM latency, and HTTPS decryption liabilities.
+
+2. CRYPTOGRAPHIC DEVICE TOKENS:
+   Workstations authenticate using unique provisioned device tokens (`Bearer dev-tok-...`), 
+   preventing cross-device spoofing or token replay.
+
+3. OFFLINE FAULT TOLERANCE:
+   Endpoint agent buffers events in local SQLite during network disruptions, ensuring 
+   zero telemetry loss upon reconnection.
+
+4. REAL-TIME CLEAN ALERT BASELINE:
+   Alerts and incidents are strictly generated from genuine live endpoint activity 
+   (USB copy, cloud upload, clipboard exfiltration), eliminating fake/demo clutter.
+
+5. REGULATORY ALIGNMENT:
+   - GDPR Article 32 (Security of Processing & Data Protection)
+   - HIPAA Security Rule §164.312 (Technical Safeguards & PHI Egress Controls)
+   - PCI-DSS Requirement 3 (Cardholder Data Protection & Luhn Verification)
+   - ISO/IEC 27001 Annex A.8.12 (Data Leakage Prevention Controls)
+
+================================================================================
+                          END OF TECHNICAL REPORT
+================================================================================

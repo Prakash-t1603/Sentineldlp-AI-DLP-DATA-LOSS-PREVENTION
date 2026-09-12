@@ -249,4 +249,47 @@ async function exportActivitiesCSV() {
   }
 }
 
+// DLP Specific Formatters & Badges
+function formatChannelBadge(channel) {
+  const ch = (channel || "USB").toUpperCase();
+  if (ch === "USB") {
+    return `<span class="badge bg-danger bg-opacity-25 text-danger border border-danger"><i class="fas fa-usb me-1"></i> USB</span>`;
+  }
+  if (ch === "BROWSER") {
+    return `<span class="badge bg-primary bg-opacity-25 text-info border border-primary"><i class="fas fa-globe me-1"></i> Browser</span>`;
+  }
+  if (ch === "EMAIL") {
+    return `<span class="badge bg-info bg-opacity-25 text-info border border-info"><i class="fas fa-envelope me-1"></i> Email</span>`;
+  }
+  if (ch === "CLOUD") {
+    return `<span class="badge bg-purple bg-opacity-25 text-purple border border-purple" style="background: rgba(139,92,246,0.2); color:#c4b5fd; border-color: rgba(139,92,246,0.4);"><i class="fas fa-cloud-arrow-up me-1"></i> Cloud</span>`;
+  }
+  return `<span class="badge bg-secondary bg-opacity-25 text-white">${ch}</span>`;
+}
+
+function formatActionBadge(action) {
+  const act = (action || "ALLOW").toUpperCase();
+  if (act === "BLOCK") {
+    return `<span class="badge bg-danger text-white fw-bold px-2 py-1"><i class="fas fa-ban me-1"></i> BLOCK</span>`;
+  }
+  if (act === "WARN") {
+    return `<span class="badge bg-warning text-dark fw-bold px-2 py-1"><i class="fas fa-triangle-exclamation me-1"></i> WARN</span>`;
+  }
+  return `<span class="badge bg-success text-white fw-bold px-2 py-1"><i class="fas fa-check-circle me-1"></i> ALLOW</span>`;
+}
+
+function escapeHTML(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+window.escapeHTML = escapeHTML;
+
+
+
 

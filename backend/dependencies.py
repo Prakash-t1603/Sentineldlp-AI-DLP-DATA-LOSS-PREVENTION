@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from backend.database import get_db
-from backend.models import User
+from backend.models import User, Device
 from backend.utils.security import decode_access_token
 from backend.config import settings
 
@@ -98,14 +98,32 @@ def verify_agent_token(
 def get_current_user_or_agent(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
     x_agent_secret: Optional[str] = Header(None, alias="X-Agent-Secret"),
+    x_device_token: Optional[str] = Header(None, alias="X-Device-Token"),
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     db: Session = Depends(get_db)
 ) -> Optional[User]:
-    """Allows either a valid JWT User or an authorized Endpoint Agent."""
+    """Allows a valid JWT User, an authorized Endpoint Agent secret, or a registered Device Token."""
+    # 1. Global Agent Secret header
     if x_agent_secret and x_agent_secret == settings.AGENT_SECRET_KEY:
         return None  # Authorized as agent
-    
+
+    # 2. X-Device-Token header authentication
+    if x_device_token:
+        dev_query = db.query(Device).filter(Device.device_token == x_device_token, Device.is_active == True)
+        if x_device_id:
+            dev_query = dev_query.filter(Device.device_id == x_device_id)
+        if dev_query.first():
+            return None  # Authorized as endpoint device
+
+    # 3. Bearer Token (JWT User or Device Token)
     if credentials and credentials.credentials:
-        payload = decode_access_token(credentials.credentials)
+        raw_token = credentials.credentials
+        if raw_token.startswith("dev-tok-"):
+            device = db.query(Device).filter(Device.device_token == raw_token, Device.is_active == True).first()
+            if device:
+                return None  # Authorized as endpoint device
+
+        payload = decode_access_token(raw_token)
         if payload and "sub" in payload:
             user = db.query(User).filter(User.username == payload["sub"]).first()
             if user and user.is_active:
@@ -113,5 +131,5 @@ def get_current_user_or_agent(
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Unauthorized. Provide valid JWT Bearer token or Agent secret header",
+        detail="Unauthorized. Provide valid JWT Bearer token, Agent secret, or Device token",
     )

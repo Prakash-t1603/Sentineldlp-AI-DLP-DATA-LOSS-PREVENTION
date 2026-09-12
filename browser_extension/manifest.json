@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "SentinelDLP AI - Enterprise Browser Agent",
+  "version": "2.0.0",
+  "description": "Authorized enterprise DLP browser integration for detecting and scanning file uploads across Google Drive, OneDrive, Dropbox, WhatsApp Web, and Webmail.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*",
+    "http://172.24.143.236:8000/*",
+    "http://172.24.143.236:8765/*",
+    "http://172.24.143.236:8766/*",
+    "http://172.24.143.236:8767/*",
+    "http://127.0.0.1:8000/*",
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8765/*",
+    "http://localhost:8765/*",
+    "http://127.0.0.1:8766/*",
+    "http://localhost:8766/*",
+    "http://127.0.0.1:8767/*",
+    "http://localhost:8767/*",
+    "*://drive.google.com/*",
+    "*://*.onedrive.com/*",
+    "*://*.live.com/*",
+    "*://*.sharepoint.com/*",
+    "*://*.dropbox.com/*",
+    "*://*.box.com/*",
+    "*://web.whatsapp.com/*",
+    "*://mail.google.com/*",
+    "*://outlook.office.com/*",
+    "*://outlook.live.com/*",
+    "*://*.wetransfer.com/*",
+    "*://*.mega.nz/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SentinelDLP Browser Agent"
+  }
+}

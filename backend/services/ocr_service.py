@@ -85,8 +85,17 @@ class OCRService:
                 if text:
                     logger.info(f"PyTesseract extracted {len(text)} chars from {filepath.name}")
                     return text
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"PyTesseract attempt for {filepath.name}: {e}")
+
+        # 4. Try registered test / environment mock extractor
+        if hasattr(self, "_mock_extractor") and callable(self._mock_extractor):
+            try:
+                text = self._mock_extractor(filepath)
+                if text:
+                    return text
+            except Exception:
+                pass
 
         return ""
 

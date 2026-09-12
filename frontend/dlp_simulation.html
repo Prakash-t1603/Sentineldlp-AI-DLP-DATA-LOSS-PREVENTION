@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DLP Threat Simulation Lab - SentinelDLP AI</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand-header">
+        <div class="brand-icon"><i class="fas fa-shield-halved"></i></div>
+        <div class="brand-text">
+          <h5 class="mb-0 text-white fw-bold">SentinelDLP</h5>
+          <span class="small text-muted" style="font-size: 0.72rem;">AI THREAT PLATFORM</span>
+        </div>
+      </div>
+      <ul class="nav-links">
+        <li class="nav-link-item"><a href="/dashboard"><i class="fas fa-chart-pie fa-fw"></i> <span class="nav-text">SOC Dashboard</span></a></li>
+        <li class="nav-link-item active"><a href="/dlp-simulation"><i class="fas fa-flask-vial fa-fw text-info"></i> <span class="nav-text">DLP Simulator</span></a></li>
+        <li class="nav-link-item"><a href="/alerts"><i class="fas fa-bell fa-fw"></i> <span class="nav-text">Live Alerts</span></a></li>
+        <li class="nav-link-item"><a href="/alert-history"><i class="fas fa-clock-rotate-left fa-fw"></i> <span class="nav-text">Alert History</span></a></li>
+        <li class="nav-link-item"><a href="/incidents"><i class="fas fa-biohazard fa-fw"></i> <span class="nav-text">Incidents</span></a></li>
+        <li class="nav-link-item"><a href="/employees"><i class="fas fa-users-gear fa-fw"></i> <span class="nav-text">Endpoints & UEBA</span></a></li>
+        <li class="nav-link-item"><a href="/files"><i class="fas fa-folder-tree fa-fw"></i> <span class="nav-text">File Data Lake</span></a></li>
+        <li class="nav-link-item"><a href="/reports"><i class="fas fa-file-invoice fa-fw"></i> <span class="nav-text">Compliance Reports</span></a></li>
+        <li class="nav-link-item"><a href="/settings"><i class="fas fa-sliders fa-fw"></i> <span class="nav-text">DLP Policies</span></a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <div class="d-flex align-items-center gap-2 user-text">
+          <div class="avatar rounded-circle bg-info text-dark fw-bold d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; font-size: 0.8rem;">
+            <i class="fas fa-user-shield"></i>
+          </div>
+          <div>
+            <div class="small fw-bold text-white current-user-name">Analyst</div>
+            <div class="text-muted" style="font-size: 0.7rem;">SOC_ADMIN</div>
+          </div>
+        </div>
+        <a href="#" class="text-danger btn-logout" title="Sign Out"><i class="fas fa-right-from-bracket"></i></a>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <div class="topbar">
+        <div>
+          <h1 class="h4 text-white fw-bold mb-1">DLP Threat Simulation & Pre-Flight Studio</h1>
+          <p class="small text-muted mb-0">Interactively test and verify Detection, Risk Scoring, and Policy Decisions across USB, Browser/Cloud, and Email</p>
+        </div>
+        <div>
+          <a href="/dashboard" class="btn btn-sm btn-cyan">
+            <i class="fas fa-chart-pie me-1"></i> Return to SOC Dashboard
+          </a>
+        </div>
+      </div>
+
+      <!-- Quick Preset Buttons -->
+      <div class="glass-panel p-3 mb-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <span class="text-white fw-bold small text-uppercase"><i class="fas fa-bolt text-warning me-2"></i>Quick Test Scenarios:</span>
+          <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-sm btn-outline-info" onclick="loadPreset('USB_BENIGN')"><i class="fas fa-usb me-1"></i> TEST 1: Normal USB (Allow)</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="loadPreset('USB_SENSITIVE')"><i class="fas fa-usb me-1"></i> TEST 2: Sensitive USB (Block)</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="loadPreset('GDRIVE_SENSITIVE')"><i class="fab fa-google-drive me-1"></i> TEST 3: Google Drive Secret (Block)</button>
+            <button class="btn btn-sm btn-outline-success" onclick="loadPreset('BROWSER_BENIGN')"><i class="fas fa-globe me-1"></i> TEST 4: Normal Browser (Allow)</button>
+            <button class="btn btn-sm btn-outline-warning" onclick="loadPreset('EMAIL_SENSITIVE')"><i class="fas fa-envelope me-1"></i> TEST 5: External Email Leak (Block)</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="loadPreset('WHATSAPP_SENSITIVE')"><i class="fab fa-whatsapp me-1"></i> TEST 6: WhatsApp Web Leak (Block)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-4">
+        <!-- Input Form Panel -->
+        <div class="col-lg-6">
+          <div class="glass-panel p-4 h-100">
+            <h5 class="text-white fw-bold mb-3"><i class="fas fa-sliders text-cyan me-2"></i>Simulation Parameters</h5>
+
+            <form id="form-simulation" onsubmit="executeSimulation(event)">
+              <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                  <label class="form-label text-muted small fw-bold">Transfer Channel</label>
+                  <select id="sim-channel" class="form-select bg-dark text-white border-secondary" onchange="onChannelChange()">
+                    <option value="USB">USB Storage</option>
+                    <option value="BROWSER" selected>Browser / Cloud Upload</option>
+                    <option value="EMAIL">Corporate Email</option>
+                    <option value="CLOUD">Cloud Sync Folder</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label text-muted small fw-bold">Application / Service</label>
+                  <input type="text" id="sim-application" class="form-control bg-dark text-white border-secondary" value="Google Drive">
+                </div>
+              </div>
+
+              <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                  <label class="form-label text-muted small fw-bold">Destination</label>
+                  <input type="text" id="sim-destination" class="form-control bg-dark text-white border-secondary" value="drive.google.com">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label text-muted small fw-bold">Employee ID</label>
+                  <input type="text" id="sim-employee" class="form-control bg-dark text-white border-secondary" value="EMP-DEV-01">
+                </div>
+              </div>
+
+              <div class="row g-3 mb-3">
+                <div class="col-md-8">
+                  <label class="form-label text-muted small fw-bold">File Name</label>
+                  <input type="text" id="sim-filename" class="form-control bg-dark text-white border-secondary" value="customer_master_database.csv">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label text-muted small fw-bold">File Size (Bytes)</label>
+                  <input type="number" id="sim-filesize" class="form-control bg-dark text-white border-secondary" value="245760">
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">Document Content to Scan</label>
+                <textarea id="sim-content" class="form-control bg-dark text-white border-secondary font-monospace" rows="8" placeholder="Paste file content or sensitive test records (Aadhaar, Credit Card, AWS Keys, Passwords, etc.)..."></textarea>
+              </div>
+
+              <button type="submit" class="btn btn-cyan w-100 py-2 fw-bold" id="btn-run-sim">
+                <i class="fas fa-play me-2"></i> Run Unified DLP Inspection Pipeline
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Output Decision & Inspection Matrix -->
+        <div class="col-lg-6">
+          <div class="glass-panel p-4 h-100" id="panel-results">
+            <h5 class="text-white fw-bold mb-3"><i class="fas fa-microscope text-info me-2"></i>DLP Pipeline Result</h5>
+
+            <div id="sim-empty-state" class="text-center text-muted py-5">
+              <i class="fas fa-shield-virus fa-3x mb-3 text-secondary opacity-50"></i>
+              <p>Configure transfer parameters and click <strong>"Run Unified DLP Inspection Pipeline"</strong> or click any <strong>Quick Test Scenario</strong> above.</p>
+            </div>
+
+            <div id="sim-results-container" class="d-none">
+              <!-- Enforced Action Banner -->
+              <div id="result-action-banner" class="p-3 rounded mb-4 d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="text-uppercase fw-bold small text-muted">Policy Decision:</div>
+                  <div class="fs-4 fw-bold" id="result-action-text">BLOCK</div>
+                </div>
+                <div class="text-end">
+                  <div class="text-uppercase fw-bold small text-muted">Risk Score:</div>
+                  <div class="fs-4 fw-bold" id="result-risk-score">92.0 / 100</div>
+                </div>
+              </div>
+
+              <!-- Metadata Summary Cards -->
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <div class="p-2 bg-dark rounded border border-secondary">
+                    <div class="small text-muted">Classification:</div>
+                    <div class="fw-bold text-white" id="result-classification">HIGHLY_CONFIDENTIAL</div>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="p-2 bg-dark rounded border border-secondary">
+                    <div class="small text-muted">Sensitivity Score:</div>
+                    <div class="fw-bold text-warning" id="result-sensitivity">95.0 / 100</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Detected Sensitive Entities -->
+              <div class="mb-3">
+                <div class="small text-muted fw-bold mb-2">Detected Sensitive Entities & Records:</div>
+                <div id="result-entities-list" class="d-flex flex-wrap gap-2">
+                  <!-- Populated dynamically -->
+                </div>
+              </div>
+
+              <!-- Policy Rule Applied -->
+              <div class="p-3 bg-dark rounded border border-secondary mb-3">
+                <div class="small text-muted">Enforced Policy:</div>
+                <div class="fw-semibold text-info" id="result-policy-name">Default Critical Threat Prevention</div>
+                <div class="small text-muted mt-1" id="result-status-msg">Transfer blocked in real-time.</div>
+              </div>
+
+              <!-- Alert Status -->
+              <div id="result-alert-box" class="p-2 rounded bg-danger bg-opacity-25 border border-danger text-white small">
+                <i class="fas fa-triangle-exclamation text-danger me-1"></i> Real-time SOC Alert & Incident Case Generated!
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/auth.js"></script>
+  <script src="/static/js/dlp_simulation.js"></script>
+</body>
+</html>

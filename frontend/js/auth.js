@@ -6,7 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Check current auth status on protected pages
   const currentPath = window.location.pathname;
-  const isAuthPage = currentPath.includes("login") || currentPath === "/" || currentPath.includes("employee-portal");
+  const isAuthPage = currentPath.includes("login") || currentPath === "/" || currentPath.includes("employee-portal") || currentPath.includes("dlp-simulation");
   const token = API.getToken();
 
   if (!isAuthPage && !token) {
@@ -21,6 +21,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   userNameEls.forEach(el => el.textContent = user.username || "SOC Analyst");
   userRoleEls.forEach(el => el.textContent = (user.role || "Analyst").toUpperCase());
+
+  window.quickLogin = async function(role) {
+    const username_or_email = role === "admin" ? "admin@sentineldlp.io" : "analyst@sentineldlp.io";
+    const password = role === "admin" ? "Admin@123456" : "Analyst@123456";
+    try {
+      const data = await API.post("/auth/login", { username_or_email, password });
+      API.setAuth(data.access_token, data.user);
+      showToast(`Authenticated as ${role.toUpperCase()}! Redirecting...`, "success");
+      setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 500);
+    } catch (err) {
+      showToast(err.message || "Quick login failed", "error");
+    }
+  };
 
   // Handle Login
   if (loginForm) {

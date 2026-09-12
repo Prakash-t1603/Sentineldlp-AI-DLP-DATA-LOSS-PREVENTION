@@ -22,6 +22,7 @@
       </div>
       <ul class="nav-links">
         <li class="nav-link-item"><a href="/dashboard"><i class="fas fa-chart-pie fa-fw"></i> <span class="nav-text">SOC Dashboard</span></a></li>
+        <li class="nav-link-item"><a href="/dlp-simulation"><i class="fas fa-flask-vial fa-fw text-info"></i> <span class="nav-text">DLP Simulator</span></a></li>
         <li class="nav-link-item"><a href="/alerts"><i class="fas fa-bell fa-fw"></i> <span class="nav-text">Live Alerts</span></a></li>
         <li class="nav-link-item"><a href="/alert-history"><i class="fas fa-clock-rotate-left fa-fw"></i> <span class="nav-text">Alert History</span></a></li>
         <li class="nav-link-item"><a href="/incidents"><i class="fas fa-biohazard fa-fw"></i> <span class="nav-text">Incidents</span></a></li>
@@ -48,12 +49,12 @@
     <main class="main-content">
       <div class="topbar">
         <div>
-          <h1 class="h4 text-white fw-bold mb-1">DLP Rule Engine & System Configuration</h1>
-          <p class="small text-muted mb-0">Configure sensitive data patterns, threshold tuning, and agent connection tokens</p>
+          <h1 class="h4 text-white fw-bold mb-1">DLP Rule Engine & Policy Matrix</h1>
+          <p class="small text-muted mb-0">Configure multi-channel policies, sensitive data patterns, threshold tuning, and agent connection tokens</p>
         </div>
       </div>
 
-      <div class="row g-4">
+      <div class="row g-4 mb-4">
         <!-- Agent Connection Info -->
         <div class="col-lg-6">
           <div class="glass-panel p-4 h-100">
@@ -76,25 +77,107 @@
         <!-- Risk Threshold Tuning -->
         <div class="col-lg-6">
           <div class="glass-panel p-4 h-100">
-            <h5 class="text-white fw-bold mb-3"><i class="fas fa-sliders text-cyan me-2"></i>Risk Tier Definitions</h5>
+            <h5 class="text-white fw-bold mb-3"><i class="fas fa-sliders text-cyan me-2"></i>Risk Tier Definitions & Actions</h5>
             
             <div class="d-flex flex-column gap-2 mb-3">
               <div class="d-flex justify-content-between align-items-center p-2 rounded bg-dark border border-danger border-opacity-50">
                 <span class="badge-risk badge-risk-critical">CRITICAL (80 - 100)</span>
-                <span class="small text-white">Auto-triggers immediate SOC Incident case & alert</span>
+                <span class="badge bg-danger text-white fw-bold">BLOCK</span>
               </div>
               <div class="d-flex justify-content-between align-items-center p-2 rounded bg-dark border border-warning border-opacity-50">
                 <span class="badge-risk badge-risk-high">HIGH (60 - 79)</span>
-                <span class="small text-white">Generates High severity alert & flags endpoint</span>
+                <span class="badge bg-danger text-white fw-bold">BLOCK / WARN</span>
               </div>
               <div class="d-flex justify-content-between align-items-center p-2 rounded bg-dark border border-warning border-opacity-25">
                 <span class="badge-risk badge-risk-medium">MEDIUM (30 - 59)</span>
-                <span class="small text-white">Logged in SOC threat feed for analyst review</span>
+                <span class="badge bg-warning text-dark fw-bold">WARN</span>
               </div>
               <div class="d-flex justify-content-between align-items-center p-2 rounded bg-dark border border-success border-opacity-25">
                 <span class="badge-risk badge-risk-low">LOW (0 - 29)</span>
-                <span class="small text-white">Baseline activity telemetry</span>
+                <span class="badge bg-success text-white fw-bold">ALLOW</span>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Multi-Channel DLP Policies -->
+        <div class="col-12">
+          <div class="glass-panel p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="text-white fw-bold mb-0"><i class="fas fa-scale-balanced text-warning me-2"></i>Multi-Channel DLP Policy Rules (USB + Browser + Email)</h5>
+              <span class="badge bg-success">6 Active Policies</span>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Policy Name</th>
+                    <th>Channel</th>
+                    <th>Destination Boundary</th>
+                    <th>Min Risk Score</th>
+                    <th>Sensitive Data Flag</th>
+                    <th>Enforced Action</th>
+                    <th>Alert Generation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="text-white fw-bold">Critical Threat Strict Prevention</td>
+                    <td><span class="badge bg-secondary">ALL CHANNELS</span></td>
+                    <td><span class="badge bg-dark border border-secondary">ANY</span></td>
+                    <td><span class="badge-risk badge-risk-critical">80.0+</span></td>
+                    <td><span class="text-muted">Optional</span></td>
+                    <td><span class="badge bg-danger text-white fw-bold"><i class="fas fa-ban me-1"></i> BLOCK</span></td>
+                    <td><span class="badge bg-danger">YES</span></td>
+                  </tr>
+                  <tr>
+                    <td class="text-white fw-bold">External Email Attachment Exfiltration Guard</td>
+                    <td><span class="badge bg-info bg-opacity-25 text-info border border-info"><i class="fas fa-envelope me-1"></i> EMAIL</span></td>
+                    <td><span class="badge bg-danger bg-opacity-25 text-danger border border-danger">EXTERNAL</span></td>
+                    <td><span class="badge-risk badge-risk-high">60.0+</span></td>
+                    <td><span class="text-success fw-bold">REQUIRED</span></td>
+                    <td><span class="badge bg-danger text-white fw-bold"><i class="fas fa-ban me-1"></i> BLOCK</span></td>
+                    <td><span class="badge bg-danger">YES</span></td>
+                  </tr>
+                  <tr>
+                    <td class="text-white fw-bold">Cloud Storage & Web Upload Leak Policy</td>
+                    <td><span class="badge bg-primary bg-opacity-25 text-info border border-primary"><i class="fas fa-globe me-1"></i> BROWSER</span></td>
+                    <td><span class="badge bg-danger bg-opacity-25 text-danger border border-danger">EXTERNAL</span></td>
+                    <td><span class="badge-risk badge-risk-high">60.0+</span></td>
+                    <td><span class="text-success fw-bold">REQUIRED</span></td>
+                    <td><span class="badge bg-danger text-white fw-bold"><i class="fas fa-ban me-1"></i> BLOCK</span></td>
+                    <td><span class="badge bg-danger">YES</span></td>
+                  </tr>
+                  <tr>
+                    <td class="text-white fw-bold">Removable USB Sensitive Copy Policy</td>
+                    <td><span class="badge bg-danger bg-opacity-25 text-danger border border-danger"><i class="fas fa-usb me-1"></i> USB</span></td>
+                    <td><span class="badge bg-warning bg-opacity-25 text-warning border border-warning">REMOVABLE</span></td>
+                    <td><span class="badge-risk badge-risk-high">60.0+</span></td>
+                    <td><span class="text-success fw-bold">REQUIRED</span></td>
+                    <td><span class="badge bg-danger text-white fw-bold"><i class="fas fa-ban me-1"></i> BLOCK</span></td>
+                    <td><span class="badge bg-danger">YES</span></td>
+                  </tr>
+                  <tr>
+                    <td class="text-white fw-bold">Medium Risk User Warning Policy</td>
+                    <td><span class="badge bg-secondary">ALL CHANNELS</span></td>
+                    <td><span class="badge bg-dark border border-secondary">ANY</span></td>
+                    <td><span class="badge-risk badge-risk-medium">30.0+</span></td>
+                    <td><span class="text-muted">Optional</span></td>
+                    <td><span class="badge bg-warning text-dark fw-bold"><i class="fas fa-triangle-exclamation me-1"></i> WARN</span></td>
+                    <td><span class="badge bg-warning text-dark">YES</span></td>
+                  </tr>
+                  <tr>
+                    <td class="text-white fw-bold">Low Risk Benign Traffic Allow Policy</td>
+                    <td><span class="badge bg-secondary">ALL CHANNELS</span></td>
+                    <td><span class="badge bg-dark border border-secondary">ANY</span></td>
+                    <td><span class="badge-risk badge-risk-low">0.0+</span></td>
+                    <td><span class="text-muted">No</span></td>
+                    <td><span class="badge bg-success text-white fw-bold"><i class="fas fa-check me-1"></i> ALLOW</span></td>
+                    <td><span class="text-muted">No</span></td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -103,8 +186,8 @@
         <div class="col-12">
           <div class="glass-panel p-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
-              <h5 class="text-white fw-bold mb-0"><i class="fas fa-shield-halved text-info me-2"></i>Active DLP Detection Rules</h5>
-              <span class="badge bg-success">5 Enforced Rules</span>
+              <h5 class="text-white fw-bold mb-0"><i class="fas fa-shield-halved text-info me-2"></i>Active Sensitive Data Detection Patterns</h5>
+              <span class="badge bg-success">Enforced Regex & Keywords</span>
             </div>
 
             <div class="table-responsive">
@@ -137,6 +220,13 @@
                     <td class="text-white fw-bold">Credit Card Pattern Rule</td>
                     <td><span class="badge bg-secondary font-monospace">REGEX</span></td>
                     <td><code class="text-info">\b(?:4[0-9]{12}|5[1-5][0-9]{14})\b (Luhn Validated)</code></td>
+                    <td><span class="tag-class tag-highly-confidential">HIGHLY CONFIDENTIAL</span></td>
+                    <td><span class="badge bg-success">ACTIVE</span></td>
+                  </tr>
+                  <tr>
+                    <td class="text-white fw-bold">Aadhaar & PAN National IDs</td>
+                    <td><span class="badge bg-secondary font-monospace">PII</span></td>
+                    <td><code class="text-info">[2-9]\d{3}\s?\d{4}\s?\d{4} / [A-Z]{5}[0-9]{4}[A-Z]</code></td>
                     <td><span class="tag-class tag-highly-confidential">HIGHLY CONFIDENTIAL</span></td>
                     <td><span class="badge bg-success">ACTIVE</span></td>
                   </tr>

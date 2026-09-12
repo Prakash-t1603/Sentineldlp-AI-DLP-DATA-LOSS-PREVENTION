@@ -2,9 +2,50 @@ import time
 import hashlib
 import threading
 import platform
-from typing import Optional, Dict, Any, Tuple
-from backend.services.nlp_service import nlp_service
-from backend.utils.helpers import get_logger
+import re
+from typing import Optional, Dict, Any, Tuple, List
+from agent.logger import get_agent_logger as get_logger
+
+# Lightweight endpoint-local sensitive data regex patterns for instant clipboard triage
+LOCAL_PATTERNS = {
+    "AWS_ACCESS_KEY": (re.compile(r"\b(AKIA[0-9A-Z]{16})\b"), 95, "HIGHLY_CONFIDENTIAL"),
+    "AWS_SECRET_KEY": (re.compile(r"(?i)\baws_secret_access_key\s*[:=]\s*['\"]?([A-Za-z0-9/+=]{40})['\"]?"), 98, "HIGHLY_CONFIDENTIAL"),
+    "AADHAAR_NUMBER": (re.compile(r"\b([2-9]\d{3}[-\s]?\d{4}[-\s]?\d{4})\b"), 92, "HIGHLY_CONFIDENTIAL"),
+    "PAN_CARD_NUMBER": (re.compile(r"\b([A-Z]{5}[0-9]{4}[A-Z]{1})\b", re.IGNORECASE), 92, "HIGHLY_CONFIDENTIAL"),
+    "CREDIT_CARD_NUMBER": (re.compile(r"\b(?:4[0-9]{3}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}|5[1-5][0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4})\b"), 92, "HIGHLY_CONFIDENTIAL"),
+    "GITHUB_TOKEN": (re.compile(r"\b(ghp_[0-9a-zA-Z]{36}|github_pat_[0-9a-zA-Z_]{82})\b"), 98, "HIGHLY_CONFIDENTIAL"),
+    "PRIVATE_KEY": (re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"), 100, "HIGHLY_CONFIDENTIAL"),
+    "GENERIC_API_KEY": (re.compile(r"(?i)\b(api_key|apikey|secret_key|client_secret|auth_token)\s*[:=]\s*['\"]([a-zA-Z0-9_\-]{16,64})['\"]"), 90, "HIGHLY_CONFIDENTIAL"),
+    "EMPLOYEE_SALARY": (re.compile(r"(?i)\b(salary|ctc|payroll|annual\s*package|monthly\s*stipend)\s*[:=]?\s*(\$|₹|rs\.?|inr)?\s*([0-9,]+)\b"), 88, "HIGHLY_CONFIDENTIAL")
+}
+
+def scan_clipboard_text(text: str) -> Tuple[List[Dict[str, Any]], float, str]:
+    """Scan text for sensitive patterns locally on the endpoint."""
+    entities = []
+    max_score = 0.0
+    highest_class = "PUBLIC"
+
+    for pattern_name, (regex, score, classification) in LOCAL_PATTERNS.items():
+        matches = regex.findall(text)
+        if matches:
+            count = len(matches)
+            samples = []
+            for m in matches[:3]:
+                if isinstance(m, tuple):
+                    m = m[0]
+                samples.append(str(m)[:20])
+            entities.append({
+                "entity_type": pattern_name,
+                "count": count,
+                "score": score,
+                "classification": classification,
+                "samples": samples
+            })
+            if score > max_score:
+                max_score = score
+                highest_class = classification
+
+    return entities, max_score, highest_class
 
 logger = get_logger("SentinelDLP.Agent.ClipboardMonitor")
 
@@ -89,8 +130,8 @@ class ClipboardMonitor:
             return
         self._last_content_hash = content_hash
 
-        # Run high-speed NLP entity scan
-        entities, max_score, classification = nlp_service.scan_text(text)
+        # Run high-speed entity scan
+        entities, max_score, classification = scan_clipboard_text(text)
         if not entities or classification == "PUBLIC":
             return
 

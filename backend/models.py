@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text
@@ -28,22 +29,74 @@ class Employee(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     employee_id = Column(String(64), unique=True, index=True, nullable=False)
+    full_name = Column(String(128), nullable=True)
+    email = Column(String(128), nullable=True)
+    phone_number = Column(String(32), nullable=True)
+    department = Column(String(64), nullable=True)
+    designation = Column(String(64), nullable=True)
     username = Column(String(64), index=True, nullable=False)
+    status = Column(String(32), default="ONLINE", nullable=False)  # ONLINE, WARNING, OFFLINE, SUSPICIOUS
+    manager = Column(String(128), nullable=True)
+    location = Column(String(128), nullable=True)
+    joining_date = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
+    
+    # Host and network telemetry preserved for backward compatibility
     hostname = Column(String(128), default="UNKNOWN_HOST")
     ip_address = Column(String(64), default="127.0.0.1")
     operating_system = Column(String(64), default="Windows")
-    status = Column(String(32), default="ONLINE", nullable=False)  # ONLINE, OFFLINE, SUSPICIOUS
     last_seen = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     risk_score = Column(Float, default=0.0, nullable=False)  # 0.0 to 100.0
 
-    # Relationships
+    # Multi-Device & Data Relationships
     files = relationship("FileRecord", back_populates="employee", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="employee", cascade="all, delete-orphan")
     incidents = relationship("Incident", back_populates="employee", cascade="all, delete-orphan")
     activities = relationship("ActivityLog", back_populates="employee", cascade="all, delete-orphan")
+    dlp_events = relationship("DLPEvent", back_populates="employee", cascade="all, delete-orphan")
+    devices = relationship("Device", back_populates="employee", cascade="all, delete-orphan")
+
+    @property
+    def is_active(self) -> bool:
+        return self.active
+
+    @is_active.setter
+    def is_active(self, val: bool):
+        self.active = val
 
     def __repr__(self):
-        return f"<Employee {self.employee_id} ({self.username}) risk={self.risk_score}>"
+        return f"<Employee {self.employee_id} ({self.full_name or self.username}) risk={self.risk_score}>"
+
+
+class Device(Base):
+    __tablename__ = "devices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(String(64), unique=True, index=True, nullable=False)  # e.g., EMP-PC-001, DEV-9B18
+    hostname = Column(String(128), index=True, nullable=False)
+    employee_id = Column(String(64), ForeignKey("employees.employee_id", ondelete="SET NULL"), nullable=True, index=True)
+    username = Column(String(64), default="employee_user")
+    operating_system = Column(String(64), default="Windows")
+    ip_address = Column(String(64), default="127.0.0.1")
+    mac_address = Column(String(64), nullable=True)
+    agent_version = Column(String(32), default="2.1.0")
+    status = Column(String(32), default="ONLINE", nullable=False)  # ONLINE, WARNING, OFFLINE
+    monitoring_enabled = Column(Boolean, default=True, nullable=False)
+    monitoring_status = Column(String(32), default="ACTIVE", nullable=False)  # ACTIVE, STOPPED, ERROR
+    active_modules = Column(Text, default='{"usb":"ACTIVE","file":"ACTIVE","clipboard":"ACTIVE","process":"ACTIVE","browser":"ACTIVE","email":"ACTIVE","event":"ACTIVE"}', nullable=True)
+    device_token = Column(String(256), nullable=False)
+    last_seen = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    registered_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    # Relationships
+    employee = relationship("Employee", back_populates="devices")
+
+    def __repr__(self):
+        return f"<Device {self.device_id} ({self.hostname}) [{self.status}]>"
 
 
 class FileRecord(Base):
@@ -147,3 +200,52 @@ class PolicyRule(Base):
 
     def __repr__(self):
         return f"<PolicyRule {self.name} ({self.rule_type})>"
+
+
+class DLPEvent(Base):
+    __tablename__ = "dlp_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(String(64), unique=True, index=True, default=lambda: f"DLP-{uuid.uuid4().hex[:12].upper()}", nullable=False)
+    employee_id = Column(String(64), ForeignKey("employees.employee_id", ondelete="CASCADE"), index=True, nullable=False)
+    device_id = Column(String(128), default="WORKSTATION", nullable=False)
+    channel = Column(String(32), index=True, nullable=False)  # USB, BROWSER, CLOUD, EMAIL
+    application = Column(String(128), nullable=False)  # Google Drive, WhatsApp Web, Outlook, Removable Storage, Dropbox, OneDrive, etc.
+    destination = Column(String(512), nullable=True)  # drive.google.com, external@example.com, web.whatsapp.com, E:\, etc.
+    file_name = Column(String(256), nullable=False)
+    file_hash = Column(String(64), default="", index=True)
+    file_size = Column(Integer, default=0)
+    file_type = Column(String(32), default="")
+    sensitive_data_detected = Column(Boolean, default=False, nullable=False)
+    detection_type = Column(String(64), default="REGEX", nullable=False)  # REGEX, KEYWORD, PII, OCR, CLASSIFIER, EXTENSION, COMPOSITE
+    risk_score = Column(Float, default=0.0, nullable=False)  # 0.0 to 100.0
+    risk_level = Column(String(32), default="LOW", nullable=False)  # LOW, MEDIUM, HIGH, CRITICAL
+    action = Column(String(32), default="ALLOW", nullable=False)  # ALLOW, WARN, BLOCK
+    timestamp = Column(DateTime, default=utcnow, nullable=False)
+    status = Column(String(32), default="SCANNED", nullable=False)  # PENDING_SCAN, SCANNED, ALLOWED, WARNED, BLOCKED, ALERTED
+    details = Column(Text, nullable=True)
+
+    # Relationships
+    employee = relationship("Employee", back_populates="dlp_events")
+
+    def __repr__(self):
+        return f"<DLPEvent {self.event_id} [{self.channel}] {self.file_name} -> {self.action} ({self.risk_level})>"
+
+
+class DLPPolicy(Base):
+    __tablename__ = "dlp_policies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(128), nullable=False)
+    channel = Column(String(32), default="ALL", nullable=False)  # ALL, USB, BROWSER, CLOUD, EMAIL
+    min_risk_score = Column(Float, default=60.0, nullable=False)
+    destination_type = Column(String(32), default="ALL", nullable=False)  # ALL, EXTERNAL, INTERNAL, REMOVABLE
+    require_sensitive_data = Column(Boolean, default=True, nullable=False)
+    action = Column(String(32), default="BLOCK", nullable=False)  # ALLOW, WARN, BLOCK
+    create_alert = Column(Boolean, default=True, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<DLPPolicy {self.name} [{self.channel}] -> {self.action}>"
+

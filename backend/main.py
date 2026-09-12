@@ -1,27 +1,30 @@
 from pathlib import Path
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
+from sqlalchemy.orm import Session
 
 from backend.config import settings, BASE_DIR
-from backend.database import engine, Base, SessionLocal
-from backend.models import User, PolicyRule
+from backend.database import engine, Base, SessionLocal, run_auto_migrations, get_db
+from backend.models import User, PolicyRule, Employee, Device
 from backend.utils.security import get_password_hash
 from backend.utils.helpers import get_logger
 
-# Import routers
 from backend.routers import (
-    auth, users, employees, files, alerts, incidents, reports, risk, dashboard
+    auth, users, employees, files, alerts, incidents, reports, risk, dashboard, dlp, agents
 )
+from backend.services.policy_service import policy_service
+from backend.services.fleet_monitor import fleet_monitor_service
 
 logger = get_logger("SentinelDLP.Main")
 
 def init_database():
-    """Create database tables and seed initial administrator account & policies."""
-    logger.info("Initializing database schema...")
+    """Create database tables, run safe auto-migrations, and seed initial administrator account & policies."""
+    logger.info("Initializing database schema and running auto-migrations...")
     Base.metadata.create_all(bind=engine)
+    run_auto_migrations()
 
     db = SessionLocal()
     try:
@@ -63,6 +66,65 @@ def init_database():
             db.add_all(default_rules)
             logger.info("Seeded default DLP policy rules.")
 
+        # 4. Seed Default DLP Channel Policies
+        policy_service.seed_default_policies(db)
+
+        # 5. Seed Initial Fleet Endpoint Devices if empty
+        if db.query(Device).count() == 0:
+            now = datetime.now(timezone.utc)
+            sample_devices = [
+                Device(
+                    device_id="EMP-PC-001",
+                    hostname="WORKSTATION-ALEX",
+                    employee_id="EMP-DEV-01",
+                    operating_system="Windows 11",
+                    ip_address="192.168.1.101",
+                    agent_version="2.1.0",
+                    status="ONLINE",
+                    monitoring_enabled=True,
+                    monitoring_status="ACTIVE",
+                    device_token="dev-tok-EMP-PC-001-master-sample-secret",
+                    last_seen=now,
+                    registered_at=now,
+                    updated_at=now,
+                    is_active=True
+                ),
+                Device(
+                    device_id="EMP-PC-002",
+                    hostname="FIN-LAPTOP-02",
+                    employee_id="EMP-FIN-02",
+                    operating_system="Windows 10",
+                    ip_address="192.168.1.102",
+                    agent_version="2.1.0",
+                    status="ONLINE",
+                    monitoring_enabled=True,
+                    monitoring_status="ACTIVE",
+                    device_token="dev-tok-EMP-PC-002-master-sample-secret",
+                    last_seen=now,
+                    registered_at=now,
+                    updated_at=now,
+                    is_active=True
+                ),
+                Device(
+                    device_id="EMP-PC-003",
+                    hostname="HR-STATION-03",
+                    employee_id="EMP-HR-03",
+                    operating_system="macOS Sonoma",
+                    ip_address="192.168.1.103",
+                    agent_version="2.1.0",
+                    status="ONLINE",
+                    monitoring_enabled=True,
+                    monitoring_status="ACTIVE",
+                    device_token="dev-tok-EMP-PC-003-master-sample-secret",
+                    last_seen=now,
+                    registered_at=now,
+                    updated_at=now,
+                    is_active=True
+                )
+            ]
+            db.add_all(sample_devices)
+            logger.info("Seeded initial endpoint fleet devices.")
+
         db.commit()
     except Exception as e:
         db.rollback()
@@ -70,33 +132,13 @@ def init_database():
     finally:
         db.close()
 
-# Embedded SentinelDLP Endpoint Protection Agent Instance
-_embedded_agent = None
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifecycle management."""
-    global _embedded_agent
+    """Application lifecycle management for Central DLP Server."""
     init_database()
-    logger.info(f"{settings.PROJECT_NAME} v{settings.VERSION} started successfully on {settings.API_HOST}:{settings.API_PORT}")
-
-    # Launch embedded real-time endpoint agent (USB transfer interception, file monitor, clipboard)
-    try:
-        from agent.agent import SentinelAgent
-        _embedded_agent = SentinelAgent()
-        _embedded_agent.start()
-        logger.info("🛡️ Embedded SentinelDLP Real-Time Endpoint Protection Agent active and monitoring USB/Files.")
-    except Exception as e:
-        logger.warning(f"Could not initialize embedded agent: {e}")
-
+    logger.info(f"{settings.PROJECT_NAME} v{settings.VERSION} Central Server started successfully on {settings.API_HOST}:{settings.API_PORT}")
     yield
-
-    if _embedded_agent:
-        try:
-            _embedded_agent.stop()
-        except Exception:
-            pass
-    logger.info("SentinelDLP application shutting down.")
+    logger.info("SentinelDLP Central Server shutting down.")
 
 
 app = FastAPI(
@@ -119,15 +161,39 @@ app.add_middleware(
 app.include_router(auth.router, prefix=settings.API_PREFIX)
 app.include_router(users.router, prefix=settings.API_PREFIX)
 app.include_router(employees.router, prefix=settings.API_PREFIX)
+app.include_router(employees.router, prefix="/api")  # Direct /api/employees compatibility
 app.include_router(files.router, prefix=settings.API_PREFIX)
 app.include_router(alerts.router, prefix=settings.API_PREFIX)
+app.include_router(alerts.router, prefix="/api") # Direct /api/alerts/... compatibility
 app.include_router(incidents.router, prefix=settings.API_PREFIX)
+app.include_router(incidents.router, prefix="/api")
 app.include_router(reports.router, prefix=settings.API_PREFIX)
-app.include_router(reports.router) # Support direct /reports/export/... and /reports/...
+app.include_router(reports.router, prefix="/api")
+app.include_router(reports.router) # Support direct /reports/export/... endpoints
 app.include_router(risk.router, prefix=settings.API_PREFIX)
+app.include_router(risk.router, prefix="/api")
 app.include_router(dashboard.router, prefix=settings.API_PREFIX)
+app.include_router(agents.router, prefix=settings.API_PREFIX)
+app.include_router(agents.router, prefix="/api")   # Direct /api/agents/... compatibility
+app.include_router(agents.router, prefix="/api/v1/devices") # Direct /api/v1/devices compatibility
+app.include_router(agents.router, prefix="/api/devices")
+app.include_router(dlp.router, prefix=settings.API_PREFIX)
+app.include_router(dlp.router, prefix="/api")  # Direct /api/dlp/... compatibility
 
-@app.get("/health", tags=["Health"])
+@app.get("/api/v1/monitoring/status", tags=["Endpoint Fleet & Agents"])
+@app.get("/api/monitoring/status", tags=["Endpoint Fleet & Agents"])
+def get_monitoring_status_endpoint(db: Session = Depends(get_db)):
+    """Fleet-wide monitoring status endpoint."""
+    return fleet_monitor_service.get_fleet_summary(db)
+
+@app.get("/api/v1/devices", tags=["Endpoint Fleet & Agents"])
+@app.get("/api/devices", tags=["Endpoint Fleet & Agents"])
+def list_devices_endpoint(db: Session = Depends(get_db)):
+    """Direct devices endpoint."""
+    from backend.services.agent_service import agent_service
+    return agent_service.get_fleet_summary(db)
+
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["Health"])
 def health_check():
     """Health check endpoint."""
     return {"status": "HEALTHY", "project": settings.PROJECT_NAME, "version": settings.VERSION}
@@ -188,3 +254,10 @@ if frontend_dir.exists():
     @app.get("/employee-portal", include_in_schema=False)
     async def serve_employee_portal():
         return FileResponse(frontend_dir / "employee_portal.html")
+
+    @app.get("/dlp-simulation", include_in_schema=False)
+    async def serve_dlp_simulation():
+        sim_file = frontend_dir / "dlp_simulation.html"
+        if sim_file.exists():
+            return FileResponse(sim_file)
+        return FileResponse(frontend_dir / "dashboard.html")

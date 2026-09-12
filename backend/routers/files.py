@@ -7,7 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import FileRecord, Employee, User
-from backend.schemas import FileRecordResponse, FileScanRequest, FileScanResponse
+from backend.schemas import (
+    FileRecordResponse, FileScanRequest, FileScanResponse,
+    FileBulkDeleteRequest, FileBulkDeleteResponse
+)
 from backend.services.file_analysis_service import file_analysis_service
 from backend.services.classifier_service import classifier_service
 from backend.services.risk_service import risk_service
@@ -188,6 +191,30 @@ async def upload_and_scan_file(
         action_type="UPLOAD_SCAN"
     )
     return scan_file_on_disk(scan_req=scan_req, db=db, auth_caller=auth_caller)
+
+@router.post("/bulk-delete", response_model=FileBulkDeleteResponse)
+def bulk_delete_files(
+    req: FileBulkDeleteRequest,
+    db: Session = Depends(get_db),
+    auth_caller: Optional[User] = Depends(get_current_user_or_agent)
+):
+    """Bulk delete indexed file records."""
+    if not req.file_ids:
+        return FileBulkDeleteResponse(message="No file IDs specified", deleted_count=0, deleted_ids=[])
+
+    deleted_ids = []
+    for fid in req.file_ids:
+        rec = db.query(FileRecord).filter(FileRecord.id == fid).first()
+        if rec:
+            db.delete(rec)
+            deleted_ids.append(fid)
+
+    db.commit()
+    return FileBulkDeleteResponse(
+        message=f"Successfully deleted {len(deleted_ids)} file record(s)",
+        deleted_count=len(deleted_ids),
+        deleted_ids=deleted_ids
+    )
 
 @router.delete("/clear-all", status_code=status.HTTP_200_OK)
 def clear_all_files(

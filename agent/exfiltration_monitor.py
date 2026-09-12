@@ -3,7 +3,7 @@ import re
 import platform
 import psutil
 from typing import Dict, Any, Optional
-from backend.utils.helpers import get_logger
+from agent.logger import get_agent_logger as get_logger
 
 logger = get_logger("SentinelDLP.Agent.ExfiltrationMonitor")
 

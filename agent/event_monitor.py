@@ -1,7 +1,7 @@
 import platform
 import threading
 import time
-from backend.utils.helpers import get_logger
+from agent.logger import get_agent_logger as get_logger
 
 logger = get_logger("SentinelDLP.Agent.EventMonitor")
 

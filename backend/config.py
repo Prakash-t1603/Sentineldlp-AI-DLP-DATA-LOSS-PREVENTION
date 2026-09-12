@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     VERSION: str = "2.0.0"
     API_PREFIX: str = "/api/v1"
     
-    # Server Configuration
-    API_HOST: str = "127.0.0.1"
+    # Server Configuration (0.0.0.0 listens on primary network IP and localhost)
+    API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     DEBUG: bool = True
     

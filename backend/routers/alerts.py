@@ -4,7 +4,10 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from backend.database import get_db
 from backend.models import Alert, Employee, FileRecord, User, Incident
-from backend.schemas import AlertCreate, AlertUpdate, AlertResponse, AlertHistoryStats
+from backend.schemas import (
+    AlertCreate, AlertUpdate, AlertResponse, AlertHistoryStats,
+    AlertBulkDeleteRequest, AlertBulkDeleteResponse
+)
 from backend.services.alert_service import alert_service
 from backend.dependencies import get_current_user_or_agent, require_analyst_or_admin
 from backend.utils.helpers import get_logger
@@ -147,4 +150,51 @@ def clear_all_alerts(
         "alerts_removed": alerts_count,
         "incidents_removed": incidents_count
     }
+
+@router.delete("/{alert_id}", status_code=status.HTTP_200_OK)
+def delete_single_alert(
+    alert_id: int,
+    db: Session = Depends(get_db),
+    auth_caller: Optional[User] = Depends(get_current_user_or_agent)
+):
+    """Delete a single alert record and decouple any associated incidents."""
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Alert #{alert_id} not found")
+
+    # Unlink or remove linked incidents
+    db.query(Incident).filter(Incident.alert_id == alert_id).update({"alert_id": None})
+    db.delete(alert)
+    db.commit()
+    logger.info(f"Deleted Alert #{alert_id}")
+    return {"message": f"Alert #{alert_id} deleted successfully", "alert_id": alert_id}
+
+@router.post("/bulk-delete", response_model=AlertBulkDeleteResponse, status_code=status.HTTP_200_OK)
+def bulk_delete_alerts(
+    payload: AlertBulkDeleteRequest,
+    db: Session = Depends(get_db),
+    auth_caller: Optional[User] = Depends(get_current_user_or_agent)
+):
+    """Delete a batch of selected alerts by their IDs."""
+    if not payload.alert_ids:
+        return AlertBulkDeleteResponse(
+            message="No alerts selected for deletion",
+            deleted_count=0,
+            deleted_ids=[]
+        )
+
+    # Decouple linked incidents
+    db.query(Incident).filter(Incident.alert_id.in_(payload.alert_ids)).update({"alert_id": None}, synchronize_session=False)
+
+    # Delete alerts
+    deleted_count = db.query(Alert).filter(Alert.id.in_(payload.alert_ids)).delete(synchronize_session=False)
+    db.commit()
+
+    logger.info(f"Bulk deleted {deleted_count} alerts (IDs: {payload.alert_ids})")
+    return AlertBulkDeleteResponse(
+        message=f"Successfully deleted {deleted_count} alert(s)",
+        deleted_count=deleted_count,
+        deleted_ids=payload.alert_ids
+    )
+
 

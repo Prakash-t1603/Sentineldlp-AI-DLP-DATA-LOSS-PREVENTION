@@ -71,28 +71,50 @@
 pip install -r requirements.txt
 ```
 
-### Seed Realistic Demo Data
-```bash
-python run.py seed
-```
-
 ### Start FastAPI Backend Server
 ```bash
-python run.py backend
+python run.py backend --host 0.0.0.0 --port 8000
 ```
 Access points:
-- **SOC Administrator Dashboard**: [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard)
-- **Employee Endpoint Portal**: [http://127.0.0.1:8000/employee-portal](http://127.0.0.1:8000/employee-portal)
-- **Interactive API Docs**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- **SOC Administrator Dashboard**: [http://172.24.143.236:8000/dashboard](http://172.24.143.236:8000/dashboard) (or [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard))
+- **Employee Endpoint Portal**: [http://172.24.143.236:8000/employee-portal](http://172.24.143.236:8000/employee-portal)
+- **Interactive Swagger API Docs**: [http://172.24.143.236:8000/docs](http://172.24.143.236:8000/docs)
+- **Health Check**: [http://172.24.143.236:8000/health](http://172.24.143.236:8000/health)
 
 ### Start Endpoint Monitoring Agent
 ```bash
+# Local development mode
 python run.py agent
+
+# Remote workstation mode
+python -m agent.agent --server-url http://172.24.143.236:8000 --employee-id EMP-001
+
+# Linux automated installer
+./agent/install_linux.sh "http://172.24.143.236:8000" "EMP-001"
+
+# Windows automated installer
+powershell -ExecutionPolicy Bypass -File .\agent\install_windows.ps1 -ServerUrl "http://172.24.143.236:8000" -EmployeeId "EMP-001"
+```
+
+### Run Multi-Endpoint Fleet Simulator
+```bash
+python run.py sim-agents
+```
+
+### Database & Alert Maintenance
+```bash
+# Purge all alerts and reset employee risk scores to clean baseline
+python run.py clear-alerts
+
+# Reset database to clean state
+python run.py reset-db
 ```
 
 ### Run Automated Tests
 ```bash
-python -m pytest tests/ -v
+python run.py test
+# or:
+pytest tests/ -v
 ```
 
 ---

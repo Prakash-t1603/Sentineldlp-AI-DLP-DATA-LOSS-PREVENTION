@@ -126,6 +126,112 @@ class RiskService:
         }
 
     @staticmethod
+    def calculate_dlp_risk(
+        channel: str,
+        sensitivity_score: float,
+        classification: str,
+        destination: Optional[str] = None,
+        application: Optional[str] = None,
+        file_size: int = 0,
+        sensitive_entities_count: int = 0,
+        has_sensitive_keywords: bool = False,
+        is_external_destination: Optional[bool] = None
+    ) -> Dict[str, Any]:
+        """
+        Unified multi-channel DLP Risk Scoring Engine shared by USB, Browser, Cloud, and Email.
+        Standardized scoring factors:
+          - File sensitivity:         +40
+          - External destination:     +30
+          - Sensitive keyword:        +15
+          - Large file:               +10
+          - Untrusted app / channel:  +20
+          - Multiple sensitive IDs:   +20
+        """
+        score = 0.0
+        factors = {}
+
+        # 1. File sensitivity (+40 max)
+        if sensitivity_score >= 80.0 or classification in ["HIGHLY_CONFIDENTIAL"]:
+            sens_contrib = 40.0
+        elif sensitivity_score >= 50.0 or classification in ["CONFIDENTIAL"]:
+            sens_contrib = 30.0
+        elif sensitivity_score >= 25.0 or classification in ["INTERNAL"]:
+            sens_contrib = 15.0
+        else:
+            sens_contrib = round((sensitivity_score / 100.0) * 40.0, 1)
+        score += sens_contrib
+        factors["file_sensitivity"] = sens_contrib
+
+        # 2. External destination (+30)
+        is_external = is_external_destination
+        if is_external is None:
+            dest_lower = (destination or "").lower()
+            if any(ext in dest_lower for ext in ["drive.google", "dropbox", "onedrive", "box.com", "wetransfer", "web.whatsapp", "mega.nz", "@"]):
+                is_external = True
+            elif any(dest_lower.startswith(p) for p in ["e:", "f:", "g:", "d:", "/media", "/mnt"]):
+                is_external = True  # Removable storage counts as external boundary
+            elif channel.upper() in ["BROWSER", "CLOUD", "USB"]:
+                is_external = True
+            else:
+                is_external = False
+
+        if is_external:
+            score += 30.0
+            factors["external_destination"] = 30.0
+        else:
+            factors["external_destination"] = 0.0
+
+        # 3. Sensitive keyword (+15)
+        if has_sensitive_keywords or classification in ["CONFIDENTIAL", "HIGHLY_CONFIDENTIAL"] or sensitive_entities_count > 0:
+            score += 15.0
+            factors["sensitive_keyword"] = 15.0
+        else:
+            factors["sensitive_keyword"] = 0.0
+
+        # 4. Large file (> 5MB) (+10)
+        if file_size > (5 * 1024 * 1024):
+            score += 10.0
+            factors["large_file"] = 10.0
+        else:
+            factors["large_file"] = 0.0
+
+        # 5. Untrusted application / risky channel (+20)
+        app_lower = (application or "").lower()
+        risky_apps = ["whatsapp", "telegram", "mega", "wetransfer", "filezilla", "tor", "curl", "unknown"]
+        if any(r in app_lower for r in risky_apps) or channel.upper() in ["USB"]:
+            score += 20.0
+            factors["untrusted_application"] = 20.0
+        else:
+            factors["untrusted_application"] = 0.0
+
+        # 6. Multiple sensitive IDs / records (>= 3) (+20)
+        if sensitive_entities_count >= 3:
+            score += 20.0
+            factors["multiple_sensitive_ids"] = 20.0
+        elif sensitive_entities_count >= 1:
+            score += 10.0
+            factors["multiple_sensitive_ids"] = 10.0
+        else:
+            factors["multiple_sensitive_ids"] = 0.0
+
+        # Non-linear floor adjustment: If sensitivity is 0 and no sensitive items, score is capped at LOW
+        if sensitivity_score < 10.0 and sensitive_entities_count == 0 and not has_sensitive_keywords:
+            score = min(score, 25.0)
+
+        # Base floor if sensitivity is critical
+        if sensitivity_score >= 85.0 and is_external:
+            score = max(score, 85.0)
+
+        final_score = min(100.0, max(0.0, score))
+        risk_level = RiskService.get_risk_level(final_score)
+
+        return {
+            "risk_score": round(final_score, 1),
+            "risk_level": risk_level,
+            "factors": factors
+        }
+
+    @staticmethod
     def calculate_employee_ueba_risk(db: Session, employee_id: str) -> Dict[str, Any]:
         """
         User and Entity Behavior Analytics (UEBA).

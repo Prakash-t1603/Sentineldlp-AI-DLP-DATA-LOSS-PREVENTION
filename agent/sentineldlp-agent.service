@@ -1,0 +1,21 @@
+[Unit]
+Description=SentinelDLP Enterprise Endpoint Monitoring Agent
+Documentation=https://github.com/Prakash-t1603/Sentineldlp-AI-DLP-DATA-LOSS-PREVENTION
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%I
+WorkingDirectory=/opt/sentineldlp/agent
+EnvironmentFile=-/etc/sentineldlp/agent.env
+EnvironmentFile=-/opt/sentineldlp/agent/.env
+ExecStart=/opt/sentineldlp/agent/venv/bin/python agent.py
+Restart=always
+RestartSec=5
+KillMode=process
+TimeoutStopSec=10
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -22,6 +22,7 @@
       </div>
       <ul class="nav-links">
         <li class="nav-link-item active"><a href="/dashboard"><i class="fas fa-chart-pie fa-fw"></i> <span class="nav-text">SOC Dashboard</span></a></li>
+        <li class="nav-link-item"><a href="/dlp-simulation"><i class="fas fa-flask-vial fa-fw text-info"></i> <span class="nav-text">DLP Simulator</span></a></li>
         <li class="nav-link-item"><a href="/alerts"><i class="fas fa-bell fa-fw"></i> <span class="nav-text">Live Alerts</span></a></li>
         <li class="nav-link-item"><a href="/alert-history"><i class="fas fa-clock-rotate-left fa-fw"></i> <span class="nav-text">Alert History</span></a></li>
         <li class="nav-link-item"><a href="/incidents"><i class="fas fa-biohazard fa-fw"></i> <span class="nav-text">Incidents</span></a></li>
@@ -49,10 +50,13 @@
       <!-- Topbar -->
       <div class="topbar">
         <div>
-          <h1 class="h4 text-white fw-bold mb-1">Security Operations Center</h1>
-          <p class="small text-muted mb-0">Endpoint Telemetry, File Classifications & Insider Threat Detection</p>
+          <h1 class="h4 text-white fw-bold mb-1">Security Operations Center — Unified DLP</h1>
+          <p class="small text-muted mb-0">Unified Real-Time Data Loss Prevention: USB Media, Browser & Cloud Uploads, Corporate Email</p>
         </div>
-        <div class="d-flex align-items-center gap-3">
+        <div class="d-flex align-items-center gap-2">
+          <a href="/dlp-simulation" class="btn btn-sm btn-outline-warning">
+            <i class="fas fa-vial-virus me-1"></i> Threat Simulation Lab
+          </a>
           <a href="/employee-portal" class="btn btn-sm btn-outline-info">
             <i class="fas fa-laptop me-1"></i> Employee Portal View
           </a>
@@ -62,70 +66,100 @@
         </div>
       </div>
 
-      <!-- KPI Stats Grid -->
-      <div class="kpi-grid">
+      <!-- Real-Time Critical Incident Banner (Hidden by default) -->
+      <div id="dlp-live-alert-banner" class="alert alert-danger d-none align-items-center justify-content-between p-3 mb-4 rounded-3 shadow border-danger" role="alert">
+        <div class="d-flex align-items-center gap-3">
+          <div class="spinner-grow spinner-grow-sm text-danger" role="status"></div>
+          <div>
+            <strong class="text-white" id="banner-alert-title">CRITICAL DLP INCIDENT BLOCKED</strong>
+            <div class="small text-white-50" id="banner-alert-desc">Unauthorized exfiltration attempt intercepted in real-time.</div>
+          </div>
+        </div>
+        <button type="button" class="btn-close btn-close-white" onclick="document.getElementById('dlp-live-alert-banner').classList.add('d-none')"></button>
+      </div>
+
+      <!-- Section: Enterprise Employee Fleet & Health KPIs -->
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="text-white fw-bold mb-0 text-uppercase tracking-wide" style="font-size: 0.8rem; letter-spacing: 0.05em;">
+          <i class="fas fa-users-viewfinder text-cyan me-1"></i> Centralized Employee & Endpoint Fleet Telemetry
+        </h6>
+        <span class="badge bg-success bg-opacity-25 text-success border border-success" style="font-size: 0.72rem;">
+          <i class="fas fa-circle-dot me-1"></i> Live Real-Time Polling Active
+        </span>
+      </div>
+
+      <div class="kpi-grid mb-4">
         <div class="glass-card kpi-card">
-          <div class="kpi-icon bg-info bg-opacity-25 text-info"><i class="fas fa-desktop"></i></div>
+          <div class="kpi-icon bg-info bg-opacity-25 text-info"><i class="fas fa-users"></i></div>
           <div>
             <div class="kpi-value" id="kpi-total-employees">0</div>
-            <div class="kpi-label">Total Endpoints</div>
+            <div class="kpi-label">Total Employees</div>
           </div>
         </div>
 
-        <div class="glass-card kpi-card">
-          <div class="kpi-icon bg-success bg-opacity-25 text-success"><i class="fas fa-wifi"></i></div>
+        <div class="glass-card kpi-card border-success border-opacity-50">
+          <div class="kpi-icon bg-success bg-opacity-25 text-success"><i class="fas fa-circle-check"></i></div>
           <div>
-            <div class="kpi-value" id="kpi-online-employees">0</div>
-            <div class="kpi-label">Online Agents</div>
+            <div class="kpi-value text-success" id="kpi-live-employees">0</div>
+            <div class="kpi-label">🟢 Live Endpoints</div>
           </div>
         </div>
 
-        <div class="glass-card kpi-card">
-          <div class="kpi-icon bg-warning bg-opacity-25 text-warning"><i class="fas fa-file-shield"></i></div>
+        <div class="glass-card kpi-card border-warning border-opacity-50">
+          <div class="kpi-icon bg-warning bg-opacity-25 text-warning"><i class="fas fa-clock"></i></div>
           <div>
-            <div class="kpi-value" id="kpi-sensitive-files">0</div>
-            <div class="kpi-label">Sensitive Files</div>
+            <div class="kpi-value text-warning" id="kpi-warning-employees">0</div>
+            <div class="kpi-label">🟡 Warning (31-60s)</div>
           </div>
         </div>
 
-        <div class="glass-card kpi-card">
-          <div class="kpi-icon bg-danger bg-opacity-25 text-danger"><i class="fas fa-triangle-exclamation"></i></div>
+        <div class="glass-card kpi-card border-danger border-opacity-50">
+          <div class="kpi-icon bg-danger bg-opacity-25 text-danger"><i class="fas fa-circle-xmark"></i></div>
           <div>
-            <div class="kpi-value" id="kpi-open-alerts">0</div>
-            <div class="kpi-label">Open Alerts</div>
+            <div class="kpi-value text-danger" id="kpi-offline-employees">0</div>
+            <div class="kpi-label">🔴 Offline (>60s)</div>
           </div>
         </div>
 
         <div class="glass-card kpi-card">
+          <div class="kpi-icon bg-info bg-opacity-25 text-cyan"><i class="fas fa-shield-halved"></i></div>
+          <div>
+            <div class="kpi-value text-cyan" id="kpi-monitoring-active">0</div>
+            <div class="kpi-label">Monitoring Active</div>
+          </div>
+        </div>
+
+        <div class="glass-card kpi-card">
+          <div class="kpi-icon bg-warning bg-opacity-25 text-warning"><i class="fas fa-bell"></i></div>
+          <div>
+            <div class="kpi-value text-warning" id="kpi-total-alerts">0</div>
+            <div class="kpi-label">Active Alerts</div>
+          </div>
+        </div>
+
+        <div class="glass-card kpi-card border-danger border-opacity-50">
           <div class="kpi-icon bg-danger bg-opacity-50 text-white"><i class="fas fa-radiation"></i></div>
           <div>
-            <div class="kpi-value" id="kpi-critical-alerts">0</div>
-            <div class="kpi-label">Critical Threats</div>
-          </div>
-        </div>
-
-        <div class="glass-card kpi-card">
-          <div class="kpi-icon bg-primary bg-opacity-25 text-primary"><i class="fas fa-shield-virus"></i></div>
-          <div>
-            <div class="kpi-value" id="kpi-active-incidents">0</div>
-            <div class="kpi-label">Active Incidents</div>
-          </div>
-        </div>
-
-        <div class="glass-card kpi-card">
-          <div class="kpi-icon bg-purple bg-opacity-25 text-purple" style="background: rgba(139, 92, 246, 0.2); color: #a78bfa;"><i class="fas fa-gauge-high"></i></div>
-          <div>
-            <div class="kpi-value" id="kpi-avg-risk">0.0</div>
-            <div class="kpi-label">Fleet Avg Risk</div>
+            <div class="kpi-value text-danger" id="kpi-critical-incidents">0</div>
+            <div class="kpi-label">Critical Incidents</div>
           </div>
         </div>
       </div>
 
-      <!-- SOC Visualizations Row -->
+      <!-- SOC Visualizations Row: Channel Dist + Risk Dist + Top Destinations -->
       <div class="row g-4 mb-4">
         <div class="col-lg-4">
           <div class="glass-panel p-3 h-100">
-            <h6 class="text-white fw-bold mb-3"><i class="fas fa-chart-pie text-info me-2"></i>Risk Level Distribution</h6>
+            <h6 class="text-white fw-bold mb-3"><i class="fas fa-layer-group text-info me-2"></i>Events by Channel</h6>
+            <div style="height: 220px; position: relative;">
+              <canvas id="chart-channel-dist"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-4">
+          <div class="glass-panel p-3 h-100">
+            <h6 class="text-white fw-bold mb-3"><i class="fas fa-chart-pie text-warning me-2"></i>Risk Level Distribution</h6>
             <div style="height: 220px; position: relative;">
               <canvas id="chart-risk-dist"></canvas>
             </div>
@@ -134,27 +168,161 @@
 
         <div class="col-lg-4">
           <div class="glass-panel p-3 h-100">
-            <h6 class="text-white fw-bold mb-3"><i class="fas fa-chart-bar text-warning me-2"></i>Alerts by Severity</h6>
+            <h6 class="text-white fw-bold mb-3"><i class="fas fa-cloud-arrow-up text-purple me-2"></i>Top Transfer Destinations</h6>
             <div style="height: 220px; position: relative;">
-              <canvas id="chart-alerts-sev"></canvas>
+              <canvas id="chart-top-destinations"></canvas>
             </div>
           </div>
         </div>
-
-        <div class="col-lg-4">
-          <div class="glass-panel p-3 h-100">
-            <h6 class="text-white fw-bold mb-3"><i class="fas fa-database text-purple me-2"></i>Files by Classification</h6>
-            <div style="height: 220px; position: relative;">
-              <canvas id="chart-files-class"></canvas>
+      <!-- Threat Alerts & Triage Section (With Select & Delete) -->
+      <div class="glass-panel p-3 mb-4" style="border-left: 4px solid var(--accent-red);">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <div>
+            <div class="d-flex align-items-center gap-2">
+              <h6 class="text-white fw-bold mb-0">
+                <i class="fas fa-triangle-exclamation text-danger me-2"></i>Security Threat Alerts
+              </h6>
+              <span class="badge bg-danger bg-opacity-25 text-danger border border-danger font-monospace" id="dash-alerts-count">2 Alerts</span>
             </div>
+            <span class="small text-muted">Select and manage active threat alerts, investigate violations, or delete resolved items</span>
           </div>
+
+          <div class="d-flex align-items-center gap-2">
+            <!-- Delete Selected Button -->
+            <button type="button" id="btn-delete-selected-dash-alerts" class="btn btn-sm btn-danger d-none" onclick="deleteSelectedDashboardAlerts()">
+              <i class="fas fa-trash-can me-1"></i> Delete Selected (<span id="dash-selected-count">0</span>)
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearAllDashboardAlerts()">
+              <i class="fas fa-trash me-1"></i> Clear All Alerts
+            </button>
+            <a href="/alerts" class="btn btn-sm btn-outline-info">
+              <i class="fas fa-arrow-up-right-from-square me-1"></i> Full Triage Page
+            </a>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table-custom align-middle">
+            <thead>
+              <tr>
+                <th style="width: 40px;" class="text-center">
+                  <input type="checkbox" class="form-check-input bg-dark border-secondary" id="select-all-dash-alerts" onchange="toggleSelectAllDashboardAlerts(this.checked)" title="Select All Alerts">
+                </th>
+                <th>Time (UTC)</th>
+                <th>Endpoint</th>
+                <th>Alert Type</th>
+                <th>Source</th>
+                <th>Severity</th>
+                <th>Risk Score</th>
+                <th>Status</th>
+                <th>Description</th>
+                <th style="width: 90px;" class="text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="table-dashboard-alerts">
+              <!-- Populated dynamically via JS -->
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <!-- Tables Row: Top Risk Endpoints & Recent Alerts -->
+      <!-- Enterprise Endpoint Fleet Telemetry Section -->
+      <div class="glass-panel p-3 mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <div>
+            <div class="d-flex align-items-center gap-2">
+              <h6 class="text-white fw-bold mb-0">
+                <i class="fas fa-server text-cyan me-2"></i>Enterprise Endpoint Fleet Telemetry
+              </h6>
+              <span class="badge bg-info bg-opacity-25 text-info border border-info font-monospace" id="fleet-total-count">0 Devices</span>
+            </div>
+            <span class="small text-muted">Real-time daemon registration, dynamic heartbeats, and client connectivity status</span>
+          </div>
+
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-success bg-opacity-20 text-success border border-success px-2 py-1" id="fleet-online-badge">
+              <i class="fas fa-circle-dot text-success me-1"></i> <span id="fleet-online-count">0</span> Online
+            </span>
+            <span class="badge bg-warning bg-opacity-20 text-warning border border-warning px-2 py-1" id="fleet-warning-badge">
+              <i class="fas fa-triangle-exclamation text-warning me-1"></i> <span id="fleet-warning-count">0</span> Warning
+            </span>
+            <span class="badge bg-danger bg-opacity-20 text-danger border border-danger px-2 py-1" id="fleet-offline-badge">
+              <i class="fas fa-circle-xmark text-danger me-1"></i> <span id="fleet-offline-count">0</span> Offline
+            </span>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table-custom align-middle">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Employee / User</th>
+                <th>Device ID</th>
+                <th>Hostname & IP</th>
+                <th>Operating System</th>
+                <th>Monitoring Modules</th>
+                <th>Last Heartbeat</th>
+                <th class="text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="table-fleet-devices">
+              <!-- Populated dynamically via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Unified DLP Event Stream Section with Channel Tabs & Live Filters -->
+      <div class="glass-panel p-3 mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <div>
+            <h6 class="text-white fw-bold mb-1"><i class="fas fa-tower-broadcast text-cyan me-2"></i>Unified DLP Event Stream</h6>
+            <span class="small text-muted">Real-time audit log of file operations across USB, Browser, Cloud, and Email</span>
+          </div>
+          
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <!-- Channel Filter Buttons -->
+            <div class="btn-group btn-group-sm" role="group">
+              <button type="button" class="btn btn-outline-secondary active btn-channel-filter" data-channel="ALL" onclick="filterEventsByChannel('ALL')">All Channels</button>
+              <button type="button" class="btn btn-outline-secondary btn-channel-filter" data-channel="USB" onclick="filterEventsByChannel('USB')"><i class="fas fa-usb me-1"></i> USB</button>
+              <button type="button" class="btn btn-outline-secondary btn-channel-filter" data-channel="BROWSER" onclick="filterEventsByChannel('BROWSER')"><i class="fas fa-globe me-1"></i> Browser</button>
+              <button type="button" class="btn btn-outline-secondary btn-channel-filter" data-channel="EMAIL" onclick="filterEventsByChannel('EMAIL')"><i class="fas fa-envelope me-1"></i> Email</button>
+              <button type="button" class="btn btn-outline-secondary btn-channel-filter" data-channel="CLOUD" onclick="filterEventsByChannel('CLOUD')"><i class="fas fa-cloud me-1"></i> Cloud</button>
+            </div>
+
+            <!-- Search input -->
+            <input type="text" id="input-search-dlp" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Search file, employee, destination..." style="width: 200px;" onkeyup="filterEventsSearch(this.value)">
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table-custom align-middle">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Employee</th>
+                <th>Channel</th>
+                <th>Application</th>
+                <th>File Name</th>
+                <th>Destination</th>
+                <th>Risk Score</th>
+                <th>Action</th>
+                <th>Status</th>
+                <th>Detection Details</th>
+              </tr>
+            </thead>
+            <tbody id="table-unified-dlp-events">
+              <!-- Populated dynamically via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Secondary Row: Top Risk Endpoints & Top Sensitive Files -->
       <div class="row g-4 mb-4">
         <div class="col-lg-6">
-          <div class="glass-panel p-3">
+          <div class="glass-panel p-3 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
               <h6 class="text-white fw-bold mb-0"><i class="fas fa-user-ninja text-danger me-2"></i>Top At-Risk Endpoints (UEBA)</h6>
               <a href="/employees" class="small text-info text-decoration-none">View Fleet <i class="fas fa-arrow-right"></i></a>
@@ -166,7 +334,7 @@
                     <th>Endpoint</th>
                     <th>Hostname</th>
                     <th>Risk Score</th>
-                    <th>Alerts</th>
+                    <th>Status</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -179,24 +347,22 @@
         </div>
 
         <div class="col-lg-6">
-          <div class="glass-panel p-3">
+          <div class="glass-panel p-3 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
-              <h6 class="text-white fw-bold mb-0"><i class="fas fa-bolt text-warning me-2"></i>Live Threat Alert Stream</h6>
-              <a href="/alerts" class="small text-info text-decoration-none">All Alerts <i class="fas fa-arrow-right"></i></a>
+              <h6 class="text-white fw-bold mb-0"><i class="fas fa-file-shield text-warning me-2"></i>Top Flagged Sensitive Files</h6>
+              <a href="/files" class="small text-info text-decoration-none">Data Lake <i class="fas fa-arrow-right"></i></a>
             </div>
             <div class="table-responsive">
               <table class="table-custom">
                 <thead>
                   <tr>
-                    <th>Time</th>
-                    <th>Endpoint</th>
-                    <th>Alert</th>
-                    <th>Severity</th>
-                    <th>Risk</th>
-                    <th>Status</th>
+                    <th>File</th>
+                    <th>Channel</th>
+                    <th>Risk Score</th>
+                    <th>Enforced Action</th>
                   </tr>
                 </thead>
-                <tbody id="table-recent-alerts">
+                <tbody id="table-top-sensitive-files">
                   <!-- Populated dynamically via JS -->
                 </tbody>
               </table>
