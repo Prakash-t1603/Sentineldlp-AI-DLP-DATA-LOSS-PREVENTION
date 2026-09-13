@@ -389,14 +389,171 @@ uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 
 ---
 
-### Launch Endpoint Agent
+### Launch Endpoint Agent (Normal & Automatic Startup Guide)
 
+#### A. Linux (Ubuntu, Debian, Kali, RHEL, Fedora)
+
+##### 1. Normal Foreground Execution (Manual / Debug)
 ```bash
-# Run foreground endpoint protection agent
-python agent/agent.py --server "http://127.0.0.1:8000" --employee-id "EMP-001" --name "Prakash T" --dept "Cybersecurity"
+# Terminal execution
+python agent/agent.py --server "http://127.0.0.1:8000" --employee-id "EMP-001" --name "Prakash T" --dept "Cybersecurity" --desig "Senior SOC Analyst"
 
-# Run agent via run.py wrapper
+# Or via the master launcher
 python run.py agent
+```
+
+##### 2. Normal Background Execution (No Terminal Lock)
+```bash
+# Run silently in background with nohup
+nohup python agent/agent.py --server "http://127.0.0.1:8000" --employee-id "EMP-001" > agent/logs/agent.log 2>&1 &
+```
+
+##### 3. Automatic Startup on Boot (Systemd Service - Recommended)
+```bash
+# Create systemd service file
+sudo tee /etc/systemd/system/sentineldlp-agent.service << 'EOF'
+[Unit]
+Description=SentinelDLP Enterprise Endpoint Protection Agent
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/prakash/Documents/DLP - Employee-Monitoring-System/agent
+ExecStart=/usr/bin/python3 /home/prakash/Documents/DLP - Employee-Monitoring-System/agent/agent.py --server http://127.0.0.1:8000 --employee-id EMP-001
+Restart=always
+RestartSec=5
+KillMode=mixed
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Reload systemd, enable service to start on every boot, and start immediately
+sudo systemctl daemon-reload
+sudo systemctl enable sentineldlp-agent.service
+sudo systemctl start sentineldlp-agent.service
+
+# Check service status and logs
+sudo systemctl status sentineldlp-agent.service
+sudo journalctl -u sentineldlp-agent.service -f
+```
+
+##### 4. Automatic Startup on User Login (XDG Autostart Desktop)
+```bash
+mkdir -p ~/.config/autostart
+cat << 'EOF' > ~/.config/autostart/sentineldlp-agent.desktop
+[Desktop Entry]
+Type=Application
+Name=SentinelDLP Endpoint Protection Agent
+Exec=python3 "/home/prakash/Documents/DLP - Employee-Monitoring-System/agent/agent.py" --server "http://127.0.0.1:8000" --employee-id "EMP-001"
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Comment=Real-Time Endpoint Data Loss Prevention
+EOF
+```
+
+---
+
+#### B. Windows (Windows 10, 11, Windows Server)
+
+##### 1. Normal Foreground Execution (Command Prompt / PowerShell)
+```powershell
+# Open Command Prompt or PowerShell:
+cd C:\SentinelDLP\agent
+python agent.py --server "http://172.24.143.236:8000" --employee-id "EMP-001" --name "Prakash T" --dept "Cybersecurity"
+```
+
+##### 2. Normal Silent Background Execution (No Console Window)
+```cmd
+# Use pythonw.exe to run completely hidden without a CMD popup
+start pythonw.exe C:\SentinelDLP\agent\agent.py --server "http://172.24.143.236:8000" --employee-id "EMP-001"
+```
+
+##### 3. Automatic Startup on PC Boot / Logon (Windows Task Scheduler - Recommended)
+Run PowerShell as **Administrator**:
+```powershell
+# Automated setup via PowerShell script:
+powershell -ExecutionPolicy Bypass -File .\agent\install_windows.ps1 -ServerUrl "http://172.24.143.236:8000" -EmployeeId "EMP-001"
+
+# Or register Task Scheduler manually via PowerShell:
+$Action = New-ScheduledTaskAction `
+    -Execute "pythonw.exe" `
+    -Argument "`"C:\SentinelDLP\agent\agent.py`" --server `"http://172.24.143.236:8000`" --employee-id `"EMP-001`"" `
+    -WorkingDirectory "C:\SentinelDLP\agent"
+
+$Trigger = New-ScheduledTaskTrigger -AtLogon
+$Principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Highest
+$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit 0 -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+
+Register-ScheduledTask -TaskName "SentinelDLPAgent" -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings -Description "SentinelDLP Enterprise Endpoint Protection Agent"
+
+# Start the task immediately:
+Start-ScheduledTask -TaskName "SentinelDLPAgent"
+```
+
+##### 4. Automatic Startup via Windows Startup Folder (Zero Admin Rights)
+1. Press `Win + R`, type `shell:startup` and press Enter (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`).
+2. Run this PowerShell command to create a hidden startup shortcut:
+```powershell
+$WshShell = New-Object -ComObject WScript.Shell
+$StartupDir = [Environment]::GetFolderPath("Startup")
+$Shortcut = $WshShell.CreateShortcut("$StartupDir\SentinelDLPAgent.lnk")
+$Shortcut.TargetPath = "pythonw.exe"
+$Shortcut.Arguments = "`"C:\SentinelDLP\agent\agent.py`" --server `"http://172.24.143.236:8000`" --employee-id `"EMP-001`""
+$Shortcut.WorkingDirectory = "C:\SentinelDLP\agent"
+$Shortcut.WindowStyle = 7 # Minimized/Hidden
+$Shortcut.Save()
+```
+
+---
+
+#### C. macOS (macOS Sonoma, Ventura, Monterey)
+
+##### 1. Normal Foreground Execution (Terminal)
+```bash
+python3 agent/agent.py --server "http://172.24.143.236:8000" --employee-id "EMP-001" --name "Prakash T" --dept "Cybersecurity"
+```
+
+##### 2. Automatic Startup on User Login (LaunchAgent - Recommended)
+```bash
+# 1. Create LaunchAgent plist file
+mkdir -p ~/Library/LaunchAgents
+cat << 'EOF' > ~/Library/LaunchAgents/com.sentineldlp.agent.plist
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.sentineldlp.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/python3</string>
+        <string>/Users/prakash/Documents/agent/agent.py</string>
+        <string>--server</string>
+        <string>http://172.24.143.236:8000</string>
+        <string>--employee-id</string>
+        <string>EMP-001</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/prakash/Documents/agent/agent.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/prakash/Documents/agent/agent_err.log</string>
+</dict>
+</plist>
+EOF
+
+# 2. Load and activate LaunchAgent (starts automatically on every Mac login)
+launchctl load ~/Library/LaunchAgents/com.sentineldlp.agent.plist
+launchctl start com.sentineldlp.agent
 ```
 
 ---
@@ -405,7 +562,7 @@ python run.py agent
 
 ```bash
 # Train the Supervised Text Classification Model (TF-IDF + Logistic Regression)
-python training/train.py
+python training/train_classifier.py
 
 # Evaluate Classification Model & Generate Classification Report (Precision, Recall, F1)
 python training/evaluate.py

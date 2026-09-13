@@ -1141,6 +1141,168 @@ Key Sections in `rules.txt`:
   - Section 11: Data Minimization, Ephemeral Processing & Privacy Protocols
 
 ================================================================================
+17. MASTER EXECUTION COMMANDS & CROSS-PLATFORM AUTO-STARTUP REFERENCE
+================================================================================
+
+--------------------------------------------------------------------------------
+17.1 CENTRAL BACKEND SERVER EXECUTION
+--------------------------------------------------------------------------------
+# Launch Central FastAPI DLP Server (Listens on 0.0.0.0:8000 on LAN and Localhost)
+python run.py backend
+
+# Custom Host and Port:
+python run.py backend --host 0.0.0.0 --port 8000
+
+# Direct Uvicorn Execution:
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+
+
+--------------------------------------------------------------------------------
+17.2 ENDPOINT AGENT EXECUTION (LINUX)
+--------------------------------------------------------------------------------
+# 1. Normal Foreground Execution (Interactive Terminal):
+python agent/agent.py --server "http://127.0.0.1:8000" --employee-id "EMP-001" --name "Prakash T" --dept "Cybersecurity" --desig "Senior SOC Analyst"
+
+# 2. Normal Background Execution (Silent / Non-blocking):
+nohup python agent/agent.py --server "http://127.0.0.1:8000" --employee-id "EMP-001" > agent/logs/agent.log 2>&1 &
+
+# 3. Automatic Startup on Boot (Systemd Service - Turn On PC):
+sudo tee /etc/systemd/system/sentineldlp-agent.service << 'EOF'
+[Unit]
+Description=SentinelDLP Enterprise Endpoint Protection Agent
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/prakash/Documents/DLP - Employee-Monitoring-System/agent
+ExecStart=/usr/bin/python3 /home/prakash/Documents/DLP - Employee-Monitoring-System/agent/agent.py --server http://127.0.0.1:8000 --employee-id EMP-001
+Restart=always
+RestartSec=5
+KillMode=mixed
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable sentineldlp-agent.service
+sudo systemctl start sentineldlp-agent.service
+
+# 4. Automatic Startup on User Login (Desktop Autostart Entry):
+mkdir -p ~/.config/autostart
+cat << 'EOF' > ~/.config/autostart/sentineldlp-agent.desktop
+[Desktop Entry]
+Type=Application
+Name=SentinelDLP Endpoint Protection Agent
+Exec=python3 "/home/prakash/Documents/DLP - Employee-Monitoring-System/agent/agent.py" --server "http://127.0.0.1:8000" --employee-id "EMP-001"
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Comment=Real-Time Endpoint Data Loss Prevention
+EOF
+
+
+--------------------------------------------------------------------------------
+17.3 ENDPOINT AGENT EXECUTION (WINDOWS)
+--------------------------------------------------------------------------------
+# 1. Normal Foreground Execution (CMD / PowerShell):
+cd C:\SentinelDLP\agent
+python agent.py --server "http://172.24.143.236:8000" --employee-id "EMP-001" --name "Prakash T" --dept "Cybersecurity"
+
+# 2. Normal Silent Background Execution (Hidden Window):
+start pythonw.exe C:\SentinelDLP\agent\agent.py --server "http://172.24.143.236:8000" --employee-id "EMP-001"
+
+# 3. Automatic Startup on Boot / Logon (Windows Task Scheduler):
+# Open PowerShell as Administrator:
+$Action = New-ScheduledTaskAction `
+    -Execute "pythonw.exe" `
+    -Argument "`"C:\SentinelDLP\agent\agent.py`" --server `"http://172.24.143.236:8000`" --employee-id `"EMP-001`"" `
+    -WorkingDirectory "C:\SentinelDLP\agent"
+
+$Trigger = New-ScheduledTaskTrigger -AtLogon
+$Principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Highest
+$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit 0 -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+
+Register-ScheduledTask -TaskName "SentinelDLPAgent" -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings -Description "SentinelDLP Enterprise Endpoint Protection Agent"
+Start-ScheduledTask -TaskName "SentinelDLPAgent"
+
+# 4. Automatic Startup via Startup Folder (No Admin Rights):
+# Press Win+R, type shell:startup, or run in PowerShell:
+$WshShell = New-Object -ComObject WScript.Shell
+$StartupDir = [Environment]::GetFolderPath("Startup")
+$Shortcut = $WshShell.CreateShortcut("$StartupDir\SentinelDLPAgent.lnk")
+$Shortcut.TargetPath = "pythonw.exe"
+$Shortcut.Arguments = "`"C:\SentinelDLP\agent\agent.py`" --server `"http://172.24.143.236:8000`" --employee-id `"EMP-001`""
+$Shortcut.WorkingDirectory = "C:\SentinelDLP\agent"
+$Shortcut.WindowStyle = 7
+$Shortcut.Save()
+
+
+--------------------------------------------------------------------------------
+17.4 ENDPOINT AGENT EXECUTION (MACOS)
+--------------------------------------------------------------------------------
+# 1. Normal Foreground Execution (Terminal):
+python3 agent/agent.py --server "http://172.24.143.236:8000" --employee-id "EMP-001" --name "Prakash T" --dept "Cybersecurity"
+
+# 2. Automatic Startup on User Login (LaunchAgent):
+mkdir -p ~/Library/LaunchAgents
+cat << 'EOF' > ~/Library/LaunchAgents/com.sentineldlp.agent.plist
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.sentineldlp.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/python3</string>
+        <string>/Users/prakash/Documents/agent/agent.py</string>
+        <string>--server</string>
+        <string>http://172.24.143.236:8000</string>
+        <string>--employee-id</string>
+        <string>EMP-001</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/prakash/Documents/agent/agent.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/prakash/Documents/agent/agent_err.log</string>
+</dict>
+</plist>
+EOF
+
+launchctl load ~/Library/LaunchAgents/com.sentineldlp.agent.plist
+launchctl start com.sentineldlp.agent
+
+
+--------------------------------------------------------------------------------
+17.5 AI TRAINING, SIMULATION & TEST BATTERY COMMANDS
+--------------------------------------------------------------------------------
+# Train Supervised Classification Model (TF-IDF + Logistic Regression):
+python training/train_classifier.py
+
+# Evaluate ML Model (Accuracy, Precision, Recall, F1 Score):
+python training/evaluate.py
+
+# Launch Simulated Fleet (3 Workstations across Engineering, Finance, HR):
+python run.py simulate
+
+# Clean Up Simulated Test Data:
+python scripts/cleanup_simulated_data.py
+
+# Execute Full Automated Test Suite (117/117 Passing):
+pytest tests/ -v
+
+
+================================================================================
                           END OF TECHNICAL REPORT
 ================================================================================
+
 
