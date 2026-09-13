@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime, timezone
 from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -13,7 +14,7 @@ from backend.utils.security import get_password_hash
 from backend.utils.helpers import get_logger
 
 from backend.routers import (
-    auth, users, employees, files, alerts, incidents, reports, risk, dashboard, dlp, agents
+    auth, users, employees, files, alerts, incidents, reports, risk, dashboard, dlp, agents, ai, ueba
 )
 from backend.services.policy_service import policy_service
 from backend.services.fleet_monitor import fleet_monitor_service
@@ -69,7 +70,117 @@ def init_database():
         # 4. Seed Default DLP Channel Policies
         policy_service.seed_default_policies(db)
 
-        # 5. Seed Initial Fleet Endpoint Devices if empty
+        # 5. Seed Initial Master Employees if not present
+        now = datetime.now(timezone.utc)
+        sample_employees = [
+            Employee(
+                employee_id="EMP-001",
+                username="prakash",
+                full_name="Prakash T",
+                email="prakash@sentineldlp.io",
+                department="Cybersecurity",
+                designation="Senior SOC Analyst",
+                hostname="WORKSTATION",
+                ip_address="172.24.143.236",
+                operating_system="Linux",
+                status="ONLINE",
+                last_seen=now,
+                created_at=now,
+                updated_at=now,
+                active=True,
+                risk_score=0.0
+            ),
+            Employee(
+                employee_id="EMP-DEV-01",
+                username="alex_dev",
+                full_name="Alex Rivera",
+                email="alex.rivera@sentineldlp.io",
+                department="Engineering",
+                designation="Senior Software Engineer",
+                hostname="WORKSTATION-ALEX",
+                ip_address="192.168.1.101",
+                operating_system="Windows 11",
+                status="ONLINE",
+                last_seen=now,
+                created_at=now,
+                updated_at=now,
+                active=True,
+                risk_score=0.0
+            ),
+            Employee(
+                employee_id="EMP-FIN-02",
+                username="sarah_fin",
+                full_name="Sarah Jenkins",
+                email="sarah.jenkins@sentineldlp.io",
+                department="Finance",
+                designation="Lead Financial Analyst",
+                hostname="FIN-LAPTOP-02",
+                ip_address="192.168.1.102",
+                operating_system="Windows 10",
+                status="ONLINE",
+                last_seen=now,
+                created_at=now,
+                updated_at=now,
+                active=True,
+                risk_score=0.0
+            ),
+            Employee(
+                employee_id="EMP-HR-03",
+                username="marcus_hr",
+                full_name="Marcus Vance",
+                email="marcus.vance@sentineldlp.io",
+                department="Human Resources",
+                designation="HR Operations Manager",
+                hostname="HR-STATION-03",
+                ip_address="192.168.1.103",
+                operating_system="macOS Sonoma",
+                status="ONLINE",
+                last_seen=now,
+                created_at=now,
+                updated_at=now,
+                active=True,
+                risk_score=0.0
+            ),
+            Employee(
+                employee_id="EMP-TEST-99",
+                username="test_user_99",
+                full_name="Test Engineer 99",
+                email="test99@sentineldlp.io",
+                department="QA & Testing",
+                designation="QA Automation Lead",
+                hostname="TEST-WORKSTATION-99",
+                ip_address="192.168.10.99",
+                operating_system="Ubuntu 22.04 LTS",
+                status="ONLINE",
+                last_seen=now,
+                created_at=now,
+                updated_at=now,
+                active=True,
+                risk_score=0.0
+            ),
+            Employee(
+                employee_id="EMP-HB-100",
+                username="hb_user_100",
+                full_name="Heartbeat Probe User",
+                email="hb100@sentineldlp.io",
+                department="Infrastructure",
+                designation="SRE Specialist",
+                hostname="TEST-HB-WS",
+                ip_address="192.168.10.100",
+                operating_system="Windows 11",
+                status="ONLINE",
+                last_seen=now,
+                created_at=now,
+                updated_at=now,
+                active=True,
+                risk_score=0.0
+            ),
+        ]
+        for emp in sample_employees:
+            if not db.query(Employee).filter(Employee.employee_id == emp.employee_id).first():
+                db.add(emp)
+
+        # 6. Seed Initial Fleet Endpoint Devices if empty
         if db.query(Device).count() == 0:
             now = datetime.now(timezone.utc)
             sample_devices = [
@@ -179,6 +290,10 @@ app.include_router(agents.router, prefix="/api/v1/devices") # Direct /api/v1/dev
 app.include_router(agents.router, prefix="/api/devices")
 app.include_router(dlp.router, prefix=settings.API_PREFIX)
 app.include_router(dlp.router, prefix="/api")  # Direct /api/dlp/... compatibility
+app.include_router(ai.router, prefix=settings.API_PREFIX)
+app.include_router(ai.router, prefix="/api")   # Direct /api/ai/... compatibility
+app.include_router(ueba.router, prefix=settings.API_PREFIX)
+app.include_router(ueba.router, prefix="/api") # Direct /api/ueba/... compatibility
 
 @app.get("/api/v1/monitoring/status", tags=["Endpoint Fleet & Agents"])
 @app.get("/api/monitoring/status", tags=["Endpoint Fleet & Agents"])
@@ -222,6 +337,16 @@ if frontend_dir.exists():
     async def serve_dashboard():
         return FileResponse(frontend_dir / "dashboard.html")
 
+    @app.get("/ai-analysis", include_in_schema=False)
+    @app.get("/ai-dlp", include_in_schema=False)
+    async def serve_ai_analysis():
+        return FileResponse(frontend_dir / "ai_analysis.html")
+
+    @app.get("/ueba", include_in_schema=False)
+    @app.get("/behavioral-analytics", include_in_schema=False)
+    async def serve_ueba():
+        return FileResponse(frontend_dir / "ueba.html")
+
     @app.get("/alerts", include_in_schema=False)
     async def serve_alerts():
         return FileResponse(frontend_dir / "alerts.html")
@@ -261,3 +386,4 @@ if frontend_dir.exists():
         if sim_file.exists():
             return FileResponse(sim_file)
         return FileResponse(frontend_dir / "dashboard.html")
+

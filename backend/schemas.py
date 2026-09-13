@@ -69,8 +69,8 @@ class EmployeeUpdate(BaseModel):
 
 class EmployeeResponse(EmployeeBase):
     id: int
-    status: str  # ONLINE, WARNING, OFFLINE, SUSPICIOUS
-    last_seen: datetime
+    status: str  # ONLINE, WARNING, OFFLINE, SUSPICIOUS, NOT_REGISTERED
+    last_seen: Optional[datetime] = None
     last_seen_seconds_ago: Optional[int] = 0
     risk_score: float
     created_at: Optional[datetime] = None
@@ -101,11 +101,17 @@ class DeviceRegisterRequest(BaseModel):
     agent_version: Optional[str] = "2.1.0"
     employee_id: Optional[str] = None
     preferred_device_id: Optional[str] = None
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    phone_number: Optional[str] = None
 
 class DeviceRegisterResponse(BaseModel):
     device_id: str
     device_token: str
     status: str
+    employee_id: Optional[str] = None
     server_time: datetime
     heartbeat_interval_seconds: int = 15
     message: str = "Device registered successfully"
@@ -115,6 +121,11 @@ class DeviceHeartbeatRequest(BaseModel):
     employee_id: Optional[str] = None
     hostname: Optional[str] = None
     username: Optional[str] = None
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    phone_number: Optional[str] = None
     ip_address: Optional[str] = None
     operating_system: Optional[str] = None
     agent_version: Optional[str] = "2.1.0"
@@ -234,6 +245,8 @@ class FileScanResponse(BaseModel):
 
 class AlertBase(BaseModel):
     employee_id: str
+    device_id: Optional[str] = None
+    event_id: Optional[str] = None
     file_id: Optional[int] = None
     alert_type: str
     severity: str = Field("LOW", pattern="^(LOW|MEDIUM|HIGH|CRITICAL)$")
@@ -360,7 +373,7 @@ class EmployeeRiskRanking(BaseModel):
     risk_score: float
     risk_level: str
     alert_count: int
-    last_seen: datetime
+    last_seen: Optional[datetime] = None
 
 class DashboardSummaryResponse(BaseModel):
     stats: DashboardStats
@@ -375,19 +388,24 @@ class DashboardSummaryResponse(BaseModel):
 
 class EmployeeDetailResponse(BaseModel):
     employee: EmployeeResponse
+    status: Optional[str] = "OFFLINE"
     devices: Optional[List[DeviceResponse]] = []
+    monitoring: Optional[Dict[str, str]] = None
     monitoring_modules: Optional[Dict[str, str]] = None
+    statistics: Optional[Dict[str, Any]] = None
     security_summary: Optional[Dict[str, Any]] = None
     activities: List[ActivityLogResponse] = []
     files: List[FileRecordResponse] = []
     alerts: List[AlertResponse] = []
     incidents: List[IncidentResponse] = []
+    recent_events: Optional[List[Dict[str, Any]]] = []
     dlp_events: Optional[List[Dict[str, Any]]] = []
     risk_history: List[Dict[str, Any]] = []
 
 # ==================== Unified DLP Event & Policy Schemas ====================
 
 class DLPEventBase(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     employee_id: Optional[str] = "EMP-LOCAL"
     device_id: Optional[str] = "WORKSTATION"
     channel: str = "USB"
@@ -403,7 +421,10 @@ class DLPEventBase(BaseModel):
     risk_level: Optional[str] = "LOW"
     action: Optional[str] = "ALLOW"
     status: Optional[str] = "SCANNED"
-    details: Optional[str] = None
+    details: Optional[Any] = None
+    file_content_base64: Optional[str] = None
+    file_path: Optional[str] = None
+    extracted_text: Optional[str] = None
 
     @field_validator("channel", "risk_level", "action", "status", mode="before")
     @classmethod
@@ -489,6 +510,12 @@ class DLPGenericScanResponse(BaseModel):
     alert_id: Optional[int] = None
     status: str
     message: str
+    ocr: Optional[Dict[str, Any]] = None
+    nlp: Optional[Dict[str, Any]] = None
+    ml: Optional[Dict[str, Any]] = None
+    ueba: Optional[Dict[str, Any]] = None
+    reasons: Optional[List[str]] = None
+    sensitive_entities: Optional[List[Dict[str, Any]]] = None
 
 class DLPPolicyBase(BaseModel):
     name: str
@@ -533,4 +560,134 @@ class DLPStatisticsResponse(BaseModel):
     top_destinations: List[KeyValueCount]
     top_sensitive_files: List[Dict[str, Any]]
     top_risk_users: List[Dict[str, Any]]
+
+
+# ==================== AI, ML, NLP & UEBA Intelligence Schemas ====================
+
+class SensitiveEntitySchema(BaseModel):
+    entity_type: str
+    category: str
+    count: int = 1
+    confidence: float = 1.0
+    masked_sample: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DLPAnalysisRequest(BaseModel):
+    text: Optional[str] = ""
+    filename: Optional[str] = "inspection_sample.txt"
+    channel: Optional[str] = "FILE"
+    destination: Optional[str] = ""
+    employee_id: Optional[str] = None
+    device_id: Optional[str] = "WORKSTATION"
+
+
+class DLPAnalysisResponse(BaseModel):
+    id: Optional[int] = None
+    event_id: Optional[str] = None
+    employee_id: Optional[str] = None
+    device_id: str = "WORKSTATION"
+    filename: str
+    file_hash: str
+    file_size: int = 0
+    file_type: Optional[str] = ""
+    channel: str = "FILE"
+    destination: Optional[str] = None
+    classification: str
+    confidence: float
+    sensitivity_score: float
+    ocr_used: bool = False
+    nlp_used: bool = True
+    ml_used: bool = True
+    ueba_used: bool = False
+    fast_path: bool = False
+    anomaly_score: float = 0.0
+    anomaly_level: str = "NORMAL"
+    risk_score: float
+    risk_level: str
+    policy_action: str
+    detected_entities: List[Dict[str, Any]] = []
+    reasons: List[str] = []
+    signals: Dict[str, Any] = {}
+    timestamp: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DLPAnalysisListResponse(BaseModel):
+    total: int
+    items: List[DLPAnalysisResponse]
+
+
+class AnalystFeedbackCreate(BaseModel):
+    analysis_id: Optional[int] = None
+    event_id: Optional[str] = None
+    feedback_type: str = Field(..., pattern="^(TRUE_POSITIVE|FALSE_POSITIVE|CORRECT_CLASSIFICATION|INCORRECT_CLASSIFICATION)$")
+    original_classification: str
+    corrected_classification: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class AnalystFeedbackResponse(BaseModel):
+    id: int
+    analysis_id: Optional[int]
+    event_id: Optional[str]
+    analyst_username: str
+    feedback_type: str
+    original_classification: str
+    corrected_classification: Optional[str]
+    notes: Optional[str]
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UEBAProfileResponse(BaseModel):
+    id: int
+    employee_id: str
+    department: Optional[str]
+    total_events_observed: int
+    mean_daily_files: float
+    std_daily_files: float
+    mean_daily_usb_copies: float
+    mean_daily_external_uploads: float
+    after_hours_ratio: float
+    current_anomaly_score: float
+    anomaly_status: str
+    last_anomaly_at: Optional[datetime]
+    last_calculated_at: Optional[datetime]
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UEBAAnomalyResponse(BaseModel):
+    id: int
+    employee_id: str
+    device_id: str
+    anomaly_score: float
+    anomaly_type: str
+    severity: str
+    description: str
+    metric_name: Optional[str]
+    observed_value: float
+    expected_value: float
+    z_score: float
+    peer_group_avg: float
+    timestamp: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ModelMetadataResponse(BaseModel):
+    id: int
+    model_name: str
+    model_version: str
+    model_type: str
+    status: str
+    threshold: float
+    precision_score: float
+    recall_score: float
+    f1_score: float
+    feature_count: int
+    training_sample_count: int
+    trained_at: Optional[datetime]
+    last_evaluated_at: Optional[datetime]
+    model_config = ConfigDict(from_attributes=True)
+
 

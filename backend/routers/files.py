@@ -88,22 +88,19 @@ def scan_file_on_disk(
     risk_score = risk_info["risk_score"]
     risk_level = risk_info["risk_level"]
 
-    # 4. Ensure Employee exists before inserting FileRecord (Prevents SQLite Foreign Key error)
+    # 4. Resolve Employee before inserting FileRecord (Prevents SQLite Foreign Key error)
     emp = db.query(Employee).filter(Employee.employee_id == scan_req.employee_id).first()
+    effective_emp_id = scan_req.employee_id
     if not emp:
-        emp = Employee(
-            employee_id=scan_req.employee_id,
-            username=scan_req.employee_id,
-            hostname="WORKSTATION",
-            status="ONLINE",
-            risk_score=0.0
-        )
-        db.add(emp)
-        db.commit()
+        first_emp = db.query(Employee).filter(Employee.active == True).first()
+        if first_emp:
+            effective_emp_id = first_emp.employee_id
+        else:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Employee '{scan_req.employee_id}' not registered.")
 
     # 5. Upsert FileRecord in Database
     file_record = db.query(FileRecord).filter(
-        (FileRecord.filepath == str(filepath)) & (FileRecord.employee_id == scan_req.employee_id)
+        (FileRecord.filepath == str(filepath)) & (FileRecord.employee_id == effective_emp_id)
     ).first()
 
     if file_record:
@@ -114,7 +111,7 @@ def scan_file_on_disk(
         file_record.modified_at = datetime.now(timezone.utc)
     else:
         file_record = FileRecord(
-            employee_id=scan_req.employee_id,
+            employee_id=effective_emp_id,
             filename=filepath.name,
             filepath=str(filepath),
             extension=ext,
@@ -136,13 +133,13 @@ def scan_file_on_disk(
         doc_type = clf_result.get("document_type")
         doc_prefix = f"Image identified as '{doc_type}' ('{filepath.name}')" if doc_type else f"File '{filepath.name}'"
         desc = (
-            f"{doc_prefix} scanned on endpoint '{scan_req.employee_id}'. "
+            f"{doc_prefix} scanned on endpoint '{effective_emp_id}'. "
             f"Classification: {classification} (Score: {sensitivity_score}/100, Confidence: {int(confidence*100)}%). "
             f"Detected {len(detected_entities)} sensitive entity types."
         )
         new_alert = alert_service.process_and_create_alert(
             db=db,
-            employee_id=scan_req.employee_id,
+            employee_id=effective_emp_id,
             alert_type="SENSITIVE_FILE_DISCOVERED",
             description=desc,
             source="FILE_SCANNER",

@@ -19,12 +19,12 @@ class BrowserEventHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if self.path in ["/health", "/api/health", "/"]:
+        if self.path in ["/health", "/api/health", "/", "/browser-event", "/api/browser-event", "/upload-event", "/api/dlp/browser-event"]:
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
-            self.wfile.write(json.dumps({"status": "ok", "service": "SentinelDLP Agent Browser Receiver"}).encode("utf-8"))
+            self.wfile.write(json.dumps({"status": "ok", "service": "SentinelDLP Agent Browser Receiver", "endpoint": self.path}).encode("utf-8"))
         else:
             self.send_response(404)
             self.end_headers()

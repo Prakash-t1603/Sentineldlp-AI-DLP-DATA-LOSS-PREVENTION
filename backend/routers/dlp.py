@@ -1,4 +1,5 @@
 import os
+import json
 import base64
 import tempfile
 from pathlib import Path
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 
 from backend.database import get_db
-from backend.models import DLPEvent, DLPPolicy, PolicyRule, Employee, FileRecord, Alert, Incident, User
+from backend.models import DLPEvent, DLPPolicy, PolicyRule, Employee, Device, FileRecord, Alert, Incident, User
 from backend.schemas import (
     DLPEventResponse, DLPEventCreate, BrowserDLPEventRequest, EmailDLPEventRequest,
     DLPGenericScanRequest, DLPGenericScanResponse, DLPPolicyCreate, DLPPolicyUpdate,
@@ -37,81 +38,72 @@ def scan_dlp_file(
 ):
     """
     Centralized DLP Scanner endpoint shared by USB, Browser, Cloud, and Email modules.
-    Runs Content NLP -> Regex -> Keywords -> PII -> OCR -> Risk Engine -> Policy Engine.
+    Runs Content OCR -> Extractors -> NLP -> Regex -> Classifier -> UEBA -> Risk Engine -> Policy Engine.
     """
     channel = scan_req.channel.upper()
-    destination = scan_req.destination or scan_req.application
-    file_name = scan_req.file_name
+    destination = scan_req.destination or scan_req.application or "Unknown Destination"
+    file_name = scan_req.file_name or "unknown"
     file_size = scan_req.file_size
-    file_hash = ""
+    raw_bytes: Optional[bytes] = None
     extracted_text = scan_req.extracted_text or ""
+    emp_id = scan_req.employee_id or "EMP-001"
+    dev_id = scan_req.device_id or "WORKSTATION"
+
+    emp = db.query(Employee).filter(Employee.employee_id == emp_id).first()
+    if not emp and dev_id:
+        dev = db.query(Device).filter(Device.device_id == dev_id).first()
+        if dev and dev.employee_id:
+            emp = db.query(Employee).filter(Employee.employee_id == dev.employee_id).first()
+    if emp:
+        emp_id = emp.employee_id
+    else:
+        first_emp = db.query(Employee).filter(Employee.active == True).first()
+        if first_emp:
+            emp_id = first_emp.employee_id
 
     # Decode base64 payload if provided
     if scan_req.file_content_base64:
         try:
             raw_bytes = base64.b64decode(scan_req.file_content_base64)
             file_size = len(raw_bytes)
-            import hashlib
-            file_hash = hashlib.sha256(raw_bytes).hexdigest()
-            try:
-                extracted_text = raw_bytes.decode("utf-8")
-            except Exception:
-                ext = Path(file_name).suffix.lower() if file_name else ".dat"
-                with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-                    tmp.write(raw_bytes)
-                    tmp_path = Path(tmp.name)
-                try:
-                    text, _ = file_analysis_service.extract_text_from_file(tmp_path)
-                    extracted_text = text or extracted_text
-                finally:
-                    try:
-                        tmp_path.unlink()
-                    except Exception:
-                        pass
         except Exception as e:
-            logger.warning(f"Error reading base64 file content in DLP scan: {e}")
+            logger.warning(f"Error decoding base64 file payload: {e}")
 
-    # Read from local filepath if provided and text is empty
+    # Read from local filepath if provided and bytes not yet acquired
     elif scan_req.file_path and Path(scan_req.file_path).exists():
         p = Path(scan_req.file_path)
-        file_size = p.stat().st_size
-        file_hash = compute_file_hash(p)
-        file_name = p.name
-        if not extracted_text:
-            text, _ = file_analysis_service.extract_text_from_file(p)
-            extracted_text = text
+        try:
+            file_size = p.stat().st_size
+            file_name = p.name
+            with open(p, "rb") as f:
+                raw_bytes = f.read()
+        except Exception as e:
+            logger.warning(f"Error reading local file {scan_req.file_path}: {e}")
 
-    # 1. Centralized Classification & Entity Scanner
-    clf_result = classifier_service.classify_file(
+    # 1. Execute Central AI DLP Pipeline
+    from backend.ai.pipeline import dlp_pipeline
+    ai_res = dlp_pipeline.analyze_payload(
+        db=db,
+        content=extracted_text,
+        content_bytes=raw_bytes,
         filename=file_name,
-        filepath=scan_req.file_path or file_name,
-        file_size=file_size,
-        extracted_text=extracted_text,
-        file_hash=file_hash
-    )
-
-    classification = clf_result.get("classification", "PUBLIC")
-    sensitivity_score = clf_result.get("sensitivity_score", 0.0)
-    detected_entities = clf_result.get("detected_entities", [])
-    indicators = clf_result.get("indicators", [])
-    sensitive_data_detected = sensitivity_score >= 30.0 or len(detected_entities) > 0
-
-    # 2. Centralized Risk Engine
-    has_keywords = any("confidential" in ind.lower() or "proprietary" in ind.lower() for ind in indicators)
-    risk_info = risk_service.calculate_dlp_risk(
         channel=channel,
-        sensitivity_score=sensitivity_score,
-        classification=classification,
         destination=destination,
-        application=scan_req.application,
-        file_size=file_size,
-        sensitive_entities_count=len(detected_entities),
-        has_sensitive_keywords=has_keywords
+        employee_id=emp_id,
+        device_id=dev_id,
+        persist=True
     )
-    risk_score = risk_info["risk_score"]
-    risk_level = risk_info["risk_level"]
 
-    # 3. Centralized Policy Engine
+    file_hash = ai_res.file_hash
+    classification = ai_res.classification
+    sensitivity_score = ai_res.sensitivity_score
+    risk_score = ai_res.risk_score
+    risk_level = ai_res.risk_level
+    action = ai_res.policy_action
+    detected_entities = ai_res.entities
+    sensitive_data_detected = len(detected_entities) > 0 or sensitivity_score >= 30.0 or classification in ("CONFIDENTIAL", "RESTRICTED", "HIGHLY_CONFIDENTIAL")
+
+    # 2. Check Database Policy Rules for any custom overrides
     policy_decision = policy_service.evaluate_policy(
         db=db,
         channel=channel,
@@ -119,35 +111,48 @@ def scan_dlp_file(
         sensitive_data_detected=sensitive_data_detected,
         destination=destination
     )
-    action = policy_decision["action"]
-    policy_name = policy_decision["policy_name"]
+    policy_name = policy_decision.get("policy_name", "AI Content Policy")
+    if policy_decision.get("action") == "BLOCK":
+        action = "BLOCK"
+    elif policy_decision.get("action") == "WARN" and action == "ALLOW":
+        action = "WARN"
 
-    # 4. Ensure employee exists
-    emp_id = scan_req.employee_id or "UNKNOWN-EMP"
+    # 3. Associate with master employee if exists, or check registered device
     emp = db.query(Employee).filter(Employee.employee_id == emp_id).first()
-    if not emp:
-        emp = Employee(
-            employee_id=emp_id,
-            username=emp_id,
-            hostname=scan_req.device_id or "WORKSTATION",
-            status="ONLINE",
-            risk_score=0.0
-        )
-        db.add(emp)
+    if not emp and dev_id:
+        dev = db.query(Device).filter(Device.device_id == dev_id).first()
+        if dev and dev.employee_id:
+            emp = db.query(Employee).filter(Employee.employee_id == dev.employee_id).first()
+            if emp:
+                emp_id = emp.employee_id
+
+    if emp:
+        emp.last_seen = datetime.now(timezone.utc)
+        emp.status = "ONLINE"
         db.commit()
 
-    # 5. Record DLPEvent in Database
+    # 4. Construct rich, structured Detection Details string
     ext = Path(file_name).suffix.lower() if file_name else ""
-    entity_summary = ", ".join([f"{e['entity_type']} (x{e['count']})" for e in detected_entities]) if detected_entities else "None"
-    details_str = (
-        f"Channel: {channel} | Application: {scan_req.application} | Destination: {destination} | "
-        f"File: '{file_name}' ({file_size} bytes) | Classification: {classification} ({sensitivity_score}/100) | "
-        f"Entities: [{entity_summary}] | Policy: '{policy_name}' -> {action}"
-    )
+    ocr_tag = f"DETECTED ({int(ai_res.confidence_breakdown.get('ocr_confidence', 0.95)*100)}%)" if ai_res.ocr_used else "NONE"
+    nlp_tag = f"DETECTED ({len(detected_entities)} entities)" if detected_entities else "CLEAN"
+    ml_tag = f"{classification} ({int(ai_res.confidence*100)}%)"
+    cat_tag = ai_res.category if ai_res.category != "UNCLASSIFIED" else (detected_entities[0]["category"] if detected_entities else "CLEAN")
+    entity_summary = ", ".join([f"{e['entity_type']} (x{e.get('count', 1)})" for e in detected_entities]) if detected_entities else "None"
+
+    if sensitive_data_detected:
+        details_str = (
+            f"OCR: {ocr_tag} | NLP: {nlp_tag} | ML: {ml_tag} | "
+            f"Sensitive Data: {cat_tag} | Entities: [{entity_summary}] | "
+            f"Risk: {risk_score} ({risk_level}) | Policy: {action}"
+        )
+    else:
+        details_str = f"OCR: {ocr_tag} | NLP: CLEAN | ML: {ml_tag} | Content Analysis: CLEAN | Risk: {risk_score} ({risk_level}) | Policy: {action}"
+
+    event_status = "BLOCKED" if action == "BLOCK" else ("WARNED" if action == "WARN" else "ALLOWED")
 
     event = DLPEvent(
         employee_id=emp_id,
-        device_id=scan_req.device_id or "WORKSTATION",
+        device_id=dev_id,
         channel=channel,
         application=scan_req.application,
         destination=destination,
@@ -156,19 +161,19 @@ def scan_dlp_file(
         file_size=file_size,
         file_type=ext,
         sensitive_data_detected=sensitive_data_detected,
-        detection_type="PII" if detected_entities else ("CLASSIFIER" if sensitivity_score > 0 else "BENIGN"),
+        detection_type="OCR+AI" if ai_res.ocr_used else ("PII+AI" if detected_entities else ("CLASSIFIER" if sensitivity_score > 0 else "BENIGN")),
         risk_score=risk_score,
         risk_level=risk_level,
         action=action,
         timestamp=datetime.now(timezone.utc),
-        status="BLOCKED" if action == "BLOCK" else ("WARNED" if action == "WARN" else "ALLOWED"),
+        status=event_status,
         details=details_str
     )
     db.add(event)
     db.commit()
     db.refresh(event)
 
-    # 6. Real-Time Alerting for HIGH and CRITICAL events
+    # 5. Real-Time Alerting for HIGH and CRITICAL events
     alert_created = False
     alert_id = None
     if action == "BLOCK" or risk_score >= 60.0 or policy_decision.get("create_alert", False):
@@ -180,6 +185,8 @@ def scan_dlp_file(
         alert = alert_service.process_and_create_alert(
             db=db,
             employee_id=emp_id,
+            device_id=dev_id,
+            event_id=event.event_id,
             alert_type=f"DLP_{channel}_EXFILTRATION_{action}",
             description=alert_desc,
             source=f"{channel}_MONITOR",
@@ -209,8 +216,25 @@ def scan_dlp_file(
         alert_created=alert_created,
         alert_id=alert_id,
         status=event.status,
-        message=f"DLP Scan Completed: Policy decided {action}."
+        message=f"DLP Scan Completed: Policy decided {action}.",
+        ocr={"used": ai_res.ocr_used, "confidence": ai_res.confidence_breakdown.get("ocr_confidence", 0.95)},
+        nlp={"used": True, "entity_count": len(detected_entities)},
+        ml={"used": True, "classification": classification, "confidence": ai_res.confidence},
+        ueba={"anomaly_score": ai_res.ueba_breakdown.get("anomaly_score", 0.0)},
+        reasons=ai_res.reasons,
+        sensitive_entities=detected_entities
     )
+
+@router.get("/browser-event")
+def get_browser_event_info():
+    """Service status and health check for the Browser DLP Event endpoint."""
+    return {
+        "status": "ACTIVE",
+        "channel": "BROWSER",
+        "service": "SentinelDLP Browser Event Receiver",
+        "supported_methods": ["POST", "GET"],
+        "description": "Send HTTP POST with file upload interception telemetry to scan files and enforce DLP policy."
+    }
 
 @router.post("/browser-event", response_model=DLPGenericScanResponse)
 def handle_browser_event(
@@ -220,7 +244,7 @@ def handle_browser_event(
 ):
     """
     Handle file upload interception events from the Browser DLP extension / web client.
-    Supports Google Drive, OneDrive, Dropbox, Webmail, WhatsApp Web, etc.
+    Supports Google Drive, OneDrive, Dropbox, Gmail Webmail, WhatsApp Web, WeTransfer, etc.
     """
     emp_id = req.employee_id or req.employee or "employee01"
     dev_id = req.device_id or req.device or "DESKTOP-001"
@@ -239,6 +263,17 @@ def handle_browser_event(
         device_id=dev_id
     )
     return scan_dlp_file(scan_req=scan_req, db=db, auth_caller=auth_caller)
+
+@router.get("/email-event")
+def get_email_event_info():
+    """Service status and health check for the Email DLP Event endpoint."""
+    return {
+        "status": "ACTIVE",
+        "channel": "EMAIL",
+        "service": "SentinelDLP Email Event Receiver",
+        "supported_methods": ["POST", "GET"],
+        "description": "Send HTTP POST with email message and MIME attachments to scan and evaluate DLP policy."
+    }
 
 @router.post("/email-event")
 def handle_email_event(
@@ -272,20 +307,48 @@ def record_generic_dlp_event(
     db: Session = Depends(get_db),
     auth_caller: Optional[User] = Depends(get_current_user_or_agent)
 ):
-    """Ingest a pre-computed or endpoint-agent generated DLP event."""
+    """Ingest a pre-computed or endpoint-agent generated DLP event with deep content analysis."""
     emp = db.query(Employee).filter(Employee.employee_id == event_in.employee_id).first()
-    if not emp:
-        emp = Employee(
-            employee_id=event_in.employee_id,
-            username=event_in.employee_id,
-            hostname=event_in.device_id or "WORKSTATION",
-            status="ONLINE",
-            risk_score=event_in.risk_score
-        )
-        db.add(emp)
-        db.commit()
+    if not emp and event_in.device_id:
+        dev = db.query(Device).filter(Device.device_id == event_in.device_id).first()
+        if dev and dev.employee_id:
+            emp = db.query(Employee).filter(Employee.employee_id == dev.employee_id).first()
 
-    event = DLPEvent(**event_in.model_dump())
+    if not emp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "EMPLOYEE_NOT_FOUND", "message": f"Employee '{event_in.employee_id}' not found. Cannot record DLP event for unassigned employee."}
+        )
+
+    emp.last_seen = datetime.now(timezone.utc)
+    emp.status = "ONLINE"
+    db.commit()
+
+    # If event has base64 file content or local file path, run content analysis
+    if event_in.file_content_base64 or (event_in.file_path and Path(event_in.file_path).exists()):
+        scan_req = DLPGenericScanRequest(
+            channel=event_in.channel or "USB",
+            application=event_in.application or "Workstation App",
+            destination=event_in.destination or "Local",
+            file_name=event_in.file_name,
+            file_path=event_in.file_path,
+            file_size=event_in.file_size or 0,
+            extracted_text=event_in.extracted_text or "",
+            file_content_base64=event_in.file_content_base64,
+            employee_id=emp.employee_id,
+            device_id=event_in.device_id
+        )
+        scan_res = scan_dlp_file(scan_req=scan_req, db=db, auth_caller=auth_caller)
+        # Fetch the created DLPEvent
+        event = db.query(DLPEvent).filter(DLPEvent.event_id == scan_res.event_id).first()
+        if event:
+            return event
+
+    event_data = event_in.model_dump(exclude={"file_content_base64", "file_path", "extracted_text"})
+    event_data["employee_id"] = emp.employee_id
+    if isinstance(event_data.get("details"), (dict, list)):
+        event_data["details"] = json.dumps(event_data["details"])
+    event = DLPEvent(**event_data)
     db.add(event)
     db.commit()
     db.refresh(event)
@@ -296,6 +359,8 @@ def record_generic_dlp_event(
         alert_service.process_and_create_alert(
             db=db,
             employee_id=event.employee_id,
+            device_id=event.device_id,
+            event_id=event.event_id,
             alert_type=f"DLP_{event.channel}_{event.action}",
             description=alert_desc,
             source=f"{event.channel}_MONITOR",
@@ -339,6 +404,38 @@ def list_dlp_events(
         )
 
     return query.order_by(DLPEvent.timestamp.desc()).offset(skip).limit(limit).all()
+
+@router.delete("/events/clear-all", status_code=status.HTTP_200_OK)
+def clear_all_dlp_events(
+    db: Session = Depends(get_db),
+    auth_caller: Optional[User] = Depends(get_current_user_or_agent)
+):
+    """Purge all recorded DLP events from the database."""
+    deleted_count = db.query(DLPEvent).delete()
+    db.commit()
+    logger.info(f"Purged all {deleted_count} DLP events.")
+    return {"message": f"Successfully cleared {deleted_count} DLP events", "deleted_count": deleted_count}
+
+@router.delete("/events/{event_id}", status_code=status.HTTP_200_OK)
+def delete_single_dlp_event(
+    event_id: str,
+    db: Session = Depends(get_db),
+    auth_caller: Optional[User] = Depends(get_current_user_or_agent)
+):
+    """Delete a specific DLP event by event_id or numeric ID."""
+    if event_id.isdigit():
+        event = db.query(DLPEvent).filter((DLPEvent.id == int(event_id)) | (DLPEvent.event_id == event_id)).first()
+    else:
+        event = db.query(DLPEvent).filter(DLPEvent.event_id == event_id).first()
+
+    if not event:
+        raise HTTPException(status_code=404, detail="DLP Event not found")
+
+    ev_id = event.event_id
+    db.delete(event)
+    db.commit()
+    logger.info(f"Deleted DLP event {ev_id}")
+    return {"message": f"DLP Event '{ev_id}' deleted successfully", "event_id": ev_id}
 
 @router.get("/events/{event_id}", response_model=DLPEventResponse)
 def get_dlp_event_by_id(
@@ -426,7 +523,7 @@ def get_dlp_statistics(
 
     # Top sensitive files
     top_files = (
-        db.query(DLPEvent.file_name, DLPEvent.channel, DLPEvent.risk_score, DLPEvent.action)
+        db.query(DLPEvent.id, DLPEvent.file_name, DLPEvent.channel, DLPEvent.risk_score, DLPEvent.action)
         .filter(DLPEvent.sensitive_data_detected == True)
         .order_by(DLPEvent.risk_score.desc())
         .limit(6)
@@ -434,10 +531,11 @@ def get_dlp_statistics(
     )
     top_sensitive_files = [
         {
-            "file_name": f[0],
-            "channel": f[1],
-            "risk_score": f[2],
-            "action": f[3]
+            "id": f[0],
+            "file_name": f[1],
+            "channel": f[2],
+            "risk_score": f[3],
+            "action": f[4]
         }
         for f in top_files
     ]
@@ -470,6 +568,31 @@ def get_dlp_statistics(
         top_sensitive_files=top_sensitive_files,
         top_risk_users=top_risk_users
     )
+
+@router.delete("/sensitive-files/clear-all", status_code=status.HTTP_200_OK)
+def clear_all_sensitive_files(
+    db: Session = Depends(get_db),
+    auth_caller: Optional[User] = Depends(get_current_user_or_agent)
+):
+    """Clear all sensitive data flags from DLP events and remove indexed FileRecords."""
+    dlp_cnt = db.query(DLPEvent).filter(DLPEvent.sensitive_data_detected == True).delete(synchronize_session=False)
+    file_cnt = db.query(FileRecord).delete(synchronize_session=False)
+    db.commit()
+    logger.info(f"Cleared {dlp_cnt} sensitive DLP events and {file_cnt} indexed files.")
+    return {"message": "All flagged sensitive files cleared successfully", "dlp_events_deleted": dlp_cnt, "files_deleted": file_cnt}
+
+@router.delete("/sensitive-files/{file_name}", status_code=status.HTTP_200_OK)
+def delete_sensitive_file(
+    file_name: str,
+    db: Session = Depends(get_db),
+    auth_caller: Optional[User] = Depends(get_current_user_or_agent)
+):
+    """Delete all sensitive DLP events and file records matching the file name."""
+    dlp_cnt = db.query(DLPEvent).filter(DLPEvent.file_name == file_name).delete(synchronize_session=False)
+    file_cnt = db.query(FileRecord).filter(FileRecord.filename == file_name).delete(synchronize_session=False)
+    db.commit()
+    logger.info(f"Deleted sensitive records for file '{file_name}' ({dlp_cnt} DLP events, {file_cnt} FileRecords)")
+    return {"message": f"Flagged file '{file_name}' deleted successfully", "file_name": file_name}
 
 @router.get("/alerts")
 def get_dlp_alerts(

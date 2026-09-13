@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from backend.database import get_db
 from backend.models import Employee, FileRecord, Alert, Incident, ActivityLog, User
 from backend.schemas import (
@@ -9,7 +9,7 @@ from backend.schemas import (
     EmployeeRiskRanking, AlertResponse, ActivityLogResponse
 )
 from backend.services.risk_service import risk_service
-from backend.dependencies import require_analyst_or_admin
+from backend.dependencies import require_analyst_or_admin, get_current_user_or_agent
 
 router = APIRouter(prefix="/dashboard", tags=["SOC Dashboard Analytics"])
 
@@ -131,3 +131,27 @@ def get_dashboard_summary(
         recent_alerts=recent_alerts,
         recent_activities=recent_activities
     )
+
+@router.delete("/activities/clear-all", status_code=status.HTTP_200_OK)
+def clear_all_activities(
+    db: Session = Depends(get_db),
+    auth_caller: Optional[User] = Depends(get_current_user_or_agent)
+):
+    """Purge all activity log records from the database."""
+    deleted_count = db.query(ActivityLog).delete()
+    db.commit()
+    return {"message": f"Successfully cleared {deleted_count} activity logs", "deleted_count": deleted_count}
+
+@router.delete("/activities/{activity_id}", status_code=status.HTTP_200_OK)
+def delete_single_activity(
+    activity_id: int,
+    db: Session = Depends(get_db),
+    auth_caller: Optional[User] = Depends(get_current_user_or_agent)
+):
+    """Delete a specific activity log by ID."""
+    act = db.query(ActivityLog).filter(ActivityLog.id == activity_id).first()
+    if not act:
+        raise HTTPException(status_code=404, detail="Activity log not found")
+    db.delete(act)
+    db.commit()
+    return {"message": f"Activity log #{activity_id} deleted successfully", "activity_id": activity_id}

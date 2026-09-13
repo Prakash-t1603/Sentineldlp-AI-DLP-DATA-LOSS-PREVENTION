@@ -286,15 +286,34 @@ window.handleDeleteEmployee = async function(employeeId) {
 };
 
 window.viewEmployeeProfile = async function(employeeId) {
+  if (!employeeId) {
+    showToast("No employee ID specified", "warning");
+    return;
+  }
+
   try {
-    const detail = await API.get(`/employees/${employeeId}`);
+    const detail = await API.get(`/employees/${encodeURIComponent(employeeId)}`);
+    if (!detail || !detail.employee) {
+      showToast(`Employee profile not found for '${employeeId}'`, "warning");
+      return;
+    }
+
     const emp = detail.employee;
     const sec = detail.security_summary || {};
     const mods = detail.monitoring_modules || {};
     const devices = detail.devices || [];
 
+    const setElText = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = (val !== undefined && val !== null) ? val : "-";
+    };
+    const setElHtml = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = (val !== undefined && val !== null) ? val : "";
+    };
+
     // Header & Status Badge
-    document.getElementById("profile-modal-emp-id").textContent = emp.employee_id;
+    setElText("profile-modal-emp-id", emp.employee_id);
     let statusBadgeHtml = "";
     if (emp.status === "ONLINE") {
       statusBadgeHtml = `<span class="badge bg-success bg-opacity-25 text-success border border-success"><i class="fas fa-circle-dot me-1"></i> 🟢 LIVE</span>`;
@@ -303,16 +322,16 @@ window.viewEmployeeProfile = async function(employeeId) {
     } else {
       statusBadgeHtml = `<span class="badge bg-danger bg-opacity-25 text-danger border border-danger"><i class="fas fa-circle-xmark me-1"></i> 🔴 OFFLINE</span>`;
     }
-    document.getElementById("profile-modal-status-badge").innerHTML = statusBadgeHtml;
+    setElHtml("profile-modal-status-badge", statusBadgeHtml);
 
     // SECTION A: Employee Information
-    document.getElementById("profile-modal-fullname").textContent = `${emp.full_name || emp.username} (@${emp.username})`;
-    document.getElementById("profile-modal-dept-desig").textContent = `${emp.department || "General"} — ${emp.designation || "Staff"}`;
-    document.getElementById("profile-modal-email-phone").textContent = `${emp.email || "No email"} | ${emp.phone_number || "No phone"}`;
-    document.getElementById("profile-modal-mgr-loc").textContent = `Mgr: ${emp.manager || "Direct"} | Loc: ${emp.location || "Office"}`;
+    setElText("profile-modal-fullname", `${emp.full_name || emp.username} (@${emp.username})`);
+    setElText("profile-modal-dept-desig", `${emp.department || "General"} — ${emp.designation || "Staff"}`);
+    setElText("profile-modal-email-phone", `${emp.email || "No email"} | ${emp.phone_number || "No phone"}`);
+    setElText("profile-modal-mgr-loc", `Mgr: ${emp.manager || "Direct"} | Loc: ${emp.location || "Office"}`);
 
     // SECTION B: Registered Devices
-    document.getElementById("profile-devices-count").textContent = devices.length;
+    setElText("profile-devices-count", devices.length);
     const devList = document.getElementById("profile-devices-list");
     if (devList) {
       if (devices.length === 0) {
@@ -364,54 +383,107 @@ window.viewEmployeeProfile = async function(employeeId) {
     }
 
     // SECTION D: Security Summary
-    document.getElementById("profile-summary-risk").innerHTML = formatRiskBadge(sec.risk_score || emp.risk_score);
-    document.getElementById("profile-summary-events").textContent = sec.total_events || 0;
-    document.getElementById("profile-summary-alerts").textContent = sec.alerts || 0;
-    document.getElementById("profile-summary-incidents").textContent = sec.incidents || 0;
-    document.getElementById("profile-summary-blocked").textContent = sec.blocked_events || 0;
-    document.getElementById("profile-summary-warnings").textContent = sec.warnings || 0;
+    setElHtml("profile-summary-risk", formatRiskBadge(sec.risk_score !== undefined ? sec.risk_score : emp.risk_score));
+    setElText("profile-summary-events", sec.total_events || 0);
+    setElText("profile-summary-alerts", sec.alerts || 0);
+    setElText("profile-summary-incidents", sec.incidents || 0);
+    setElText("profile-summary-blocked", sec.blocked_events || 0);
+    setElText("profile-summary-warnings", sec.warnings || 0);
 
-    // SECTION E: Recent Activity & DLP Events
-    const eventsBody = document.getElementById("profile-recent-events-body");
-    if (eventsBody) {
-      const dlpList = detail.dlp_events || [];
-      const actList = detail.activities || [];
-
-      if (dlpList.length === 0 && actList.length === 0) {
-        eventsBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-3">No recorded security or activity events</td></tr>`;
+    // SECTION E: Security Alerts
+    const alerts = detail.alerts || [];
+    setElText("profile-alerts-count", alerts.length);
+    const alertsBody = document.getElementById("profile-alerts-body");
+    if (alertsBody) {
+      if (alerts.length === 0) {
+        alertsBody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-3">No security alerts recorded for this employee</td></tr>`;
       } else {
-        const rows = [];
-        for (const ev of dlpList.slice(0, 10)) {
-          rows.push(`
-            <tr>
-              <td><span class="text-muted small">${formatDate(ev.timestamp)}</span></td>
-              <td><span class="badge bg-dark border border-secondary text-cyan">${ev.channel}</span></td>
-              <td><div class="text-white text-truncate small" style="max-width: 180px;">${escapeHTML(ev.file_name || ev.application)}</div></td>
-              <td><span class="text-muted small">${escapeHTML(ev.destination || "Local")}</span></td>
-              <td>${formatSeverityBadge(ev.risk_level)}</td>
-              <td>${formatActionBadge(ev.action)}</td>
-            </tr>
-          `);
-        }
-        for (const act of actList.slice(0, 10)) {
-          rows.push(`
-            <tr>
-              <td><span class="text-muted small">${formatDate(act.timestamp)}</span></td>
-              <td><span class="badge bg-secondary bg-opacity-25 text-white">${act.activity_type}</span></td>
-              <td><div class="text-white text-truncate small" style="max-width: 180px;">${escapeHTML(act.filepath || act.process_name || 'System')}</div></td>
-              <td><span class="text-muted small">${escapeHTML(act.destination || "Local")}</span></td>
-              <td>${formatRiskBadge(act.risk_score)}</td>
-              <td><span class="badge bg-secondary text-white">AUDIT</span></td>
-            </tr>
-          `);
-        }
-        eventsBody.innerHTML = rows.slice(0, 15).join("");
+        alertsBody.innerHTML = alerts.map(a => `
+          <tr>
+            <td>
+              <div class="fw-bold text-white font-monospace small">${escapeHTML(a.alert_id || `ALT-${a.id}`)}</div>
+              <div class="text-muted" style="font-size: 0.7rem;">${formatDate(a.created_at)}</div>
+            </td>
+            <td>${formatSeverityBadge(a.severity)}</td>
+            <td>${formatAlertTypeBadge(a.source || a.alert_type)}</td>
+            <td><span class="badge bg-dark border border-secondary text-cyan small">${escapeHTML(a.source || "Endpoint")}</span></td>
+            <td>
+              <div class="text-white small fw-semibold">${escapeHTML(a.title || a.rule_name || "Security Alert")}</div>
+              <div class="text-muted text-truncate" style="max-width: 260px; font-size: 0.72rem;">${escapeHTML(a.description || "-")}</div>
+            </td>
+            <td>${formatRiskBadge(a.risk_score || 0)}</td>
+            <td>${formatAlertStatusBadge(a.status)}</td>
+          </tr>
+        `).join("");
       }
     }
 
-    const modal = new bootstrap.Modal(document.getElementById("employeeProfileModal"));
-    modal.show();
+    // SECTION F: Security Incidents
+    const incidents = detail.incidents || [];
+    setElText("profile-incidents-count", incidents.length);
+    const incidentsBody = document.getElementById("profile-incidents-body");
+    if (incidentsBody) {
+      if (incidents.length === 0) {
+        incidentsBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-3">No security incidents recorded for this employee</td></tr>`;
+      } else {
+        incidentsBody.innerHTML = incidents.map(inc => `
+          <tr>
+            <td>
+              <span class="fw-bold font-monospace text-danger small">${escapeHTML(inc.incident_id || `INC-${inc.id}`)}</span>
+            </td>
+            <td>${formatSeverityBadge(inc.severity)}</td>
+            <td>
+              <div class="text-white small fw-semibold">${escapeHTML(inc.title || "Policy Incident")}</div>
+              <div class="text-muted text-truncate" style="max-width: 260px; font-size: 0.72rem;">${escapeHTML(inc.description || "-")}</div>
+            </td>
+            <td>${formatAlertStatusBadge(inc.status)}</td>
+            <td><span class="text-muted small">${formatDate(inc.created_at)}</span></td>
+            <td><span class="text-muted small">${formatDate(inc.updated_at || inc.created_at)}</span></td>
+          </tr>
+        `).join("");
+      }
+    }
+
+    // SECTION G: Recent DLP Events & Audit Stream
+    const dlpList = detail.dlp_events || detail.recent_events || [];
+    setElText("profile-dlp-count", dlpList.length);
+    const eventsBody = document.getElementById("profile-recent-events-body");
+    if (eventsBody) {
+      if (dlpList.length === 0) {
+        eventsBody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-3">No recorded security DLP events</td></tr>`;
+      } else {
+        eventsBody.innerHTML = dlpList.slice(0, 20).map(ev => {
+          const act = (ev.action || "ALLOW").toUpperCase();
+          const statusBadge = act === 'BLOCK' 
+            ? '<span class="badge bg-danger">BLOCKED</span>' 
+            : (act === 'WARN' ? '<span class="badge bg-warning text-dark">WARNED</span>' : '<span class="badge bg-success">LOGGED</span>');
+
+          return `
+            <tr>
+              <td>
+                <div class="fw-bold text-white font-monospace small">${escapeHTML(ev.event_id || `EV-${ev.id}`)}</div>
+                <div class="text-muted" style="font-size: 0.7rem;">${formatDate(ev.timestamp)}</div>
+              </td>
+              <td>${formatChannelBadge(ev.channel)}</td>
+              <td><span class="text-white small">${escapeHTML(ev.application || "System")}</span></td>
+              <td><span class="text-muted small">${escapeHTML(ev.destination || "Local")}</span></td>
+              <td><div class="text-white text-truncate small" style="max-width: 180px;" title="${escapeHTML(ev.file_name || '-')}">${escapeHTML(ev.file_name || "-")}</div></td>
+              <td>${formatRiskBadge(ev.risk_score || 0)}</td>
+              <td>${formatActionBadge(ev.action)}</td>
+              <td>${statusBadge}</td>
+            </tr>
+          `;
+        }).join("");
+      }
+    }
+
+    const modalEl = document.getElementById("employeeProfileModal");
+    if (modalEl) {
+      const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+      modal.show();
+    }
   } catch (err) {
+    console.error("Error loading employee profile:", err);
     showToast("Failed to fetch employee details: " + err.message, "error");
   }
 };

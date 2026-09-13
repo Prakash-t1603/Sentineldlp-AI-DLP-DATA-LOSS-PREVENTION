@@ -67,37 +67,35 @@
   function handleFileSelected(file, inputElement) {
     if (!file) return;
 
-    const fileName = file.name;
-    const fileSize = file.size;
+    const fileName = file.name || "pasted_file.dat";
+    const fileSize = file.size || 0;
     const ext = fileName.includes(".") ? `.${fileName.split(".").pop().toLowerCase()}` : "";
 
-    console.log(`[SentinelDLP Content] Upload initiated: '${fileName}' (${fileSize} bytes) on ${appName}`);
+    console.log(`[SentinelDLP Content] File interception initiated: '${fileName}' (${fileSize} bytes) on ${appName}`);
 
-    // Read content snippet or base64 for local scanning
+    // Read full file as DataURL to cleanly obtain base64 bytes for both text and binary (images, pdfs, docs)
     const reader = new FileReader();
     reader.onload = function (e) {
       let b64 = "";
       let textSnippet = "";
       try {
         const result = e.target.result;
-        if (typeof result === "string") {
-          b64 = btoa(unescape(encodeURIComponent(result.slice(0, 100000))));
-          textSnippet = result.slice(0, 5000);
+        if (typeof result === "string" && result.includes(",")) {
+          b64 = result.split(",")[1]; // Clean base64 payload
         }
       } catch (err) {
-        // Fallback array buffer
+        console.warn("[SentinelDLP Content] Base64 encoding error:", err);
       }
 
       const payload = {
         channel: "BROWSER",
         application: appName,
+        destination: currentHost,
         domain: currentHost,
         file_name: fileName,
         file_size: fileSize,
         file_extension: ext,
         browser: navigator.userAgent.includes("Edg") ? "Microsoft Edge" : (navigator.userAgent.includes("Chrome") ? "Google Chrome" : "Browser"),
-        employee_id: "EMP-BROWSER-01",
-        device_id: window.location.hostname,
         extracted_text: textSnippet,
         file_content_base64: b64,
         timestamp: new Date().toISOString(),
@@ -112,7 +110,9 @@
 
             if (response.decision.action === "BLOCK") {
               if (inputElement) {
-                inputElement.value = ""; // Clear file input
+                try {
+                  inputElement.value = ""; // Clear file input element
+                } catch (e) {}
               }
             }
           }
@@ -120,11 +120,12 @@
       );
     };
 
-    if (file.type.startsWith("text/") || ext === ".txt" || ext === ".csv" || ext === ".json" || ext === ".md" || ext === ".env") {
-      reader.readAsText(file);
-    } else {
-      reader.readAsBinaryString(file);
-    }
+    reader.onerror = function (err) {
+      console.warn("[SentinelDLP Content] FileReader error:", err);
+    };
+
+    // Always read as DataURL so binary files (images, PDFs, DOCX, XLSX) retain 100% integrity
+    reader.readAsDataURL(file);
   }
 
   // Intercept file input change events
@@ -144,6 +145,15 @@
     if (event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
       for (let i = 0; i < event.dataTransfer.files.length; i++) {
         handleFileSelected(event.dataTransfer.files[i], null);
+      }
+    }
+  }, true);
+
+  // Intercept Clipboard Paste file/image uploads
+  document.addEventListener("paste", function (event) {
+    if (event.clipboardData && event.clipboardData.files && event.clipboardData.files.length > 0) {
+      for (let i = 0; i < event.clipboardData.files.length; i++) {
+        handleFileSelected(event.clipboardData.files[i], null);
       }
     }
   }, true);

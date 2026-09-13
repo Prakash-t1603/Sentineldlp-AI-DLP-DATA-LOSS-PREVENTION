@@ -3,7 +3,9 @@ import requests
 from typing import Dict, Any, Optional, Tuple
 from agent.config import (
     API_BASE_URL, SERVER_URL, AGENT_SECRET, HOSTNAME,
-    OS_NAME, LOCAL_IP, EMPLOYEE_ID, USERNAME, load_device_credentials, save_device_credentials
+    OS_NAME, LOCAL_IP, EMPLOYEE_ID, USERNAME, EMPLOYEE_NAME,
+    EMPLOYEE_EMAIL, EMPLOYEE_DEPT, EMPLOYEE_DESIG, EMPLOYEE_PHONE,
+    load_device_credentials, save_device_credentials
 )
 from agent.logger import get_agent_logger
 from agent.event_queue import event_queue
@@ -37,7 +39,15 @@ class AgentAPIClient:
             headers["Authorization"] = f"Bearer {self.device_token}"
         return headers
 
-    def register(self, employee_id: Optional[str] = None) -> bool:
+    def register(
+        self,
+        employee_id: Optional[str] = None,
+        full_name: Optional[str] = None,
+        email: Optional[str] = None,
+        department: Optional[str] = None,
+        designation: Optional[str] = None,
+        phone_number: Optional[str] = None
+    ) -> bool:
         """Register the endpoint device with the Central DLP Server."""
         url = f"{self.api_base}/agents/register"
         payload = {
@@ -45,6 +55,11 @@ class AgentAPIClient:
             "operating_system": OS_NAME,
             "ip_address": LOCAL_IP,
             "username": USERNAME,
+            "full_name": full_name or EMPLOYEE_NAME,
+            "email": email or EMPLOYEE_EMAIL,
+            "department": department or EMPLOYEE_DEPT,
+            "designation": designation or EMPLOYEE_DESIG,
+            "phone_number": phone_number or EMPLOYEE_PHONE,
             "agent_version": "2.1.0",
             "employee_id": employee_id or EMPLOYEE_ID,
             "preferred_device_id": self.device_id
@@ -60,6 +75,9 @@ class AgentAPIClient:
                 save_device_credentials(self.device_id, self.device_token)
                 logger.info(f"Endpoint registered successfully! Assigned Device ID: {self.device_id}")
                 return True
+            elif resp.status_code in [404, 409] and "EMPLOYEE_NOT_REGISTERED" in resp.text:
+                logger.error(f"❌ Employee ID '{payload.get('employee_id')}' not registered. Register the employee before installing/activating the endpoint. Contact administrator.")
+                return False
             else:
                 logger.warning(f"Registration rejected with status {resp.status_code}: {resp.text}")
                 return False
@@ -71,6 +89,10 @@ class AgentAPIClient:
         self,
         status: str = "ONLINE",
         employee_id: Optional[str] = None,
+        full_name: Optional[str] = None,
+        email: Optional[str] = None,
+        department: Optional[str] = None,
+        designation: Optional[str] = None,
         monitoring_status: str = "ACTIVE",
         active_modules: Optional[Dict[str, str]] = None,
         metrics: Optional[Dict[str, Any]] = None
@@ -82,6 +104,10 @@ class AgentAPIClient:
             "employee_id": employee_id or EMPLOYEE_ID,
             "hostname": HOSTNAME,
             "username": USERNAME,
+            "full_name": full_name or EMPLOYEE_NAME,
+            "email": email or EMPLOYEE_EMAIL,
+            "department": department or EMPLOYEE_DEPT,
+            "designation": designation or EMPLOYEE_DESIG,
             "ip_address": LOCAL_IP,
             "operating_system": OS_NAME,
             "agent_version": "2.1.0",

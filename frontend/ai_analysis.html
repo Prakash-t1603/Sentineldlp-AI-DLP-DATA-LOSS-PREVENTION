@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI DLP Deep Inspection & ML Engine — SentinelDLP SOC</title>
+  <!-- Google Fonts & FontAwesome -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/dashboard" class="sidebar-brand">
+          <i class="fas fa-shield-halved brand-icon text-cyan"></i>
+          <span class="brand-text">Sentinel<span class="text-cyan">DLP</span></span>
+        </a>
+      </div>
+      <ul class="sidebar-nav">
+        <li class="nav-link-item"><a href="/dashboard"><i class="fas fa-chart-line fa-fw"></i> <span class="nav-text">SOC Overview</span></a></li>
+        <li class="nav-link-item active"><a href="/ai-analysis"><i class="fas fa-brain fa-fw text-cyan"></i> <span class="nav-text">AI DLP Analysis</span></a></li>
+        <li class="nav-link-item"><a href="/ueba"><i class="fas fa-user-secret fa-fw"></i> <span class="nav-text">UEBA Behavioral AI</span></a></li>
+        <li class="nav-link-item"><a href="/alerts"><i class="fas fa-bell fa-fw"></i> <span class="nav-text">Alerts Stream</span></a></li>
+        <li class="nav-link-item"><a href="/alert-history"><i class="fas fa-history fa-fw"></i> <span class="nav-text">Alert History</span></a></li>
+        <li class="nav-link-item"><a href="/incidents"><i class="fas fa-shield-halved fa-fw"></i> <span class="nav-text">Incident Response</span></a></li>
+        <li class="nav-link-item"><a href="/employees"><i class="fas fa-user-shield fa-fw"></i> <span class="nav-text">Endpoint Fleet</span></a></li>
+        <li class="nav-link-item"><a href="/files"><i class="fas fa-folder-tree fa-fw"></i> <span class="nav-text">File Data Lake</span></a></li>
+        <li class="nav-link-item"><a href="/reports"><i class="fas fa-file-invoice fa-fw"></i> <span class="nav-text">Compliance Reports</span></a></li>
+        <li class="nav-link-item"><a href="/settings"><i class="fas fa-sliders fa-fw"></i> <span class="nav-text">DLP Policies</span></a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <div class="d-flex align-items-center gap-2 user-text">
+          <div class="avatar rounded-circle bg-info text-dark fw-bold d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; font-size: 0.8rem;">
+            <i class="fas fa-user-shield"></i>
+          </div>
+          <div>
+            <div class="small fw-bold text-white current-user-name">Analyst</div>
+            <div class="text-muted" style="font-size: 0.7rem;" class="current-user-role">SOC_ADMIN</div>
+          </div>
+        </div>
+        <a href="#" class="text-danger btn-logout" title="Sign Out"><i class="fas fa-right-from-bracket"></i></a>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Topbar -->
+      <div class="topbar">
+        <div>
+          <h1 class="h4 text-white fw-bold mb-1"><i class="fas fa-brain text-cyan me-2"></i>AI-Powered Data Loss Prevention Engine</h1>
+          <p class="small text-muted mb-0">Multi-tier Machine Learning, Regex + NLP Hybrid Entity Detection, Multi-tier OCR & Explainable Decisioning</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-info bg-opacity-10 text-info border border-info px-3 py-2">
+            <i class="fas fa-microchip me-1"></i> Hybrid ML + NLP v2.3.0
+          </span>
+          <button class="btn btn-sm btn-cyan" onclick="loadAnalysisHistory(); loadModelRegistry();">
+            <i class="fas fa-arrows-rotate me-1"></i> Refresh AI Telemetry
+          </button>
+        </div>
+      </div>
+
+      <!-- Live AI Pipeline Status & Metrics Overview -->
+      <div class="kpi-grid mb-4">
+        <div class="glass-card kpi-card">
+          <div class="kpi-icon bg-info bg-opacity-25 text-info"><i class="fas fa-magnifying-glass-chart"></i></div>
+          <div>
+            <div class="kpi-value" id="kpi-total-inspected">0</div>
+            <div class="kpi-label">Total AI Inspections</div>
+          </div>
+        </div>
+
+        <div class="glass-card kpi-card border-danger border-opacity-50">
+          <div class="kpi-icon bg-danger bg-opacity-25 text-danger"><i class="fas fa-ban"></i></div>
+          <div>
+            <div class="kpi-value text-danger" id="kpi-ai-blocked">0</div>
+            <div class="kpi-label">Blocked Exfiltrations</div>
+          </div>
+        </div>
+
+        <div class="glass-card kpi-card border-warning border-opacity-50">
+          <div class="kpi-icon bg-warning bg-opacity-25 text-warning"><i class="fas fa-triangle-exclamation"></i></div>
+          <div>
+            <div class="kpi-value text-warning" id="kpi-ai-warned">0</div>
+            <div class="kpi-label">Policy Warnings</div>
+          </div>
+        </div>
+
+        <div class="glass-card kpi-card border-purple border-opacity-50">
+          <div class="kpi-icon bg-purple bg-opacity-25 text-purple"><i class="fas fa-camera"></i></div>
+          <div>
+            <div class="kpi-value text-purple" id="kpi-ocr-files">0</div>
+            <div class="kpi-label">OCR Scanned Files</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive AI Sandbox & Deep Inspector -->
+      <div class="row g-4 mb-4">
+        <div class="col-lg-7">
+          <div class="glass-card h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="text-white fw-bold mb-0">
+                <i class="fas fa-vial-circle-check text-cyan me-2"></i>Live AI DLP Inspection Sandbox
+              </h6>
+              <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary active" id="tab-text-btn" onclick="switchSandboxMode('text')">Text / Snippet</button>
+                <button type="button" class="btn btn-outline-secondary" id="tab-file-btn" onclick="switchSandboxMode('file')">Document Upload</button>
+              </div>
+            </div>
+
+            <!-- Text Mode Form -->
+            <div id="sandbox-text-mode">
+              <div class="mb-3">
+                <label class="form-label text-muted small">Sample Sensitive Document / Code / Payload</label>
+                <textarea class="form-control bg-dark text-white border-secondary" id="sandbox-text-input" rows="7" placeholder="Paste source code, server environment configs, credit cards, SSN lists, customer databases, or medical records for real-time AI classification..." style="font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;"></textarea>
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-md-4">
+                  <label class="form-label text-muted small">Sample Filename</label>
+                  <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="sandbox-filename" value="confidential_audit.txt">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label text-muted small">Exfiltration Channel</label>
+                  <select class="form-select form-select-sm bg-dark text-white border-secondary" id="sandbox-channel">
+                    <option value="FILE">Local File Modification</option>
+                    <option value="USB">USB Removable Storage</option>
+                    <option value="BROWSER">Web Browser / Cloud Upload</option>
+                    <option value="EMAIL">Corporate Email Attachment</option>
+                    <option value="CLIPBOARD">System Clipboard Copy</option>
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label text-muted small">Quick Load Pre-sets</label>
+                  <select class="form-select form-select-sm bg-dark text-cyan border-secondary" id="sandbox-preset" onchange="loadPresetSample(this.value)">
+                    <option value="">-- Load Attack Preset --</option>
+                    <option value="rsa_key">RSA Private Key & Master Passwords</option>
+                    <option value="aws_keys">AWS Root API Keys & S3 Vault</option>
+                    <option value="pci_card">PCI-DSS Cardholder Record & CVV</option>
+                    <option value="hipaa_phi">HIPAA Medical PHI Records</option>
+                    <option value="mna_leak">Merger & Acquisition Term Sheet</option>
+                    <option value="safe_doc">Public Open Source Documentation</option>
+                  </select>
+                </div>
+              </div>
+              <button class="btn btn-cyan w-100 fw-bold py-2" id="btn-run-analysis" onclick="runTextAnalysis()">
+                <i class="fas fa-bolt me-1"></i> Execute Real-Time Multi-Tier AI Analysis
+              </button>
+            </div>
+
+            <!-- File Upload Mode Form -->
+            <div id="sandbox-file-mode" class="d-none">
+              <div class="p-4 border border-dashed border-secondary rounded-3 text-center mb-3 bg-dark bg-opacity-50">
+                <i class="fas fa-cloud-arrow-up text-cyan fa-3x mb-3"></i>
+                <h6 class="text-white">Upload Document or Image for AI & OCR Analysis</h6>
+                <p class="small text-muted mb-3">Supports TXT, CSV, JSON, PDF, DOCX, XLSX, PPTX, PNG, JPG, BMP (Multi-tier OCR will automatically process images)</p>
+                <input type="file" class="form-control bg-dark text-white border-secondary" id="sandbox-file-input">
+              </div>
+              <button class="btn btn-cyan w-100 fw-bold py-2" id="btn-run-file-analysis" onclick="runFileUploadAnalysis()">
+                <i class="fas fa-file-shield me-1"></i> Upload & Run Deep Document Inspection
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Output & Explainability Dashboard -->
+        <div class="col-lg-5">
+          <div class="glass-card h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="text-white fw-bold mb-0">
+                <i class="fas fa-chart-pie text-cyan me-2"></i>Analysis Verdict & Explainability
+              </h6>
+              <span id="analysis-latency-badge" class="badge bg-secondary">Awaiting Input</span>
+            </div>
+
+            <div id="sandbox-empty-state" class="text-center py-5 text-muted">
+              <i class="fas fa-microchip fa-3x text-secondary opacity-50 mb-3"></i>
+              <p class="small mb-0">Run an analysis in the sandbox to view real-time classification, detected entities, confidence radar, and explainable signals.</p>
+            </div>
+
+            <div id="sandbox-result-container" class="d-none">
+              <!-- Tier & Action Header -->
+              <div class="d-flex justify-content-between align-items-center p-3 rounded-3 mb-3" id="verdict-banner" style="background: rgba(17, 24, 39, 0.95); border-left: 4px solid var(--accent-cyan);">
+                <div>
+                  <div class="small text-muted text-uppercase tracking-wider">Classification Tier</div>
+                  <h4 class="fw-bold mb-0 text-white" id="res-classification">PUBLIC</h4>
+                  <span class="badge bg-dark border border-secondary text-info mt-1" id="res-category">UNCLASSIFIED</span>
+                </div>
+                <div class="text-end">
+                  <div class="small text-muted text-uppercase tracking-wider">Enforcement Verdict</div>
+                  <span class="badge fs-6 px-3 py-2" id="res-action-badge">ALLOW</span>
+                  <div class="small text-muted mt-1">Risk Score: <span class="fw-bold text-white" id="res-risk-score">0.0</span>/100</div>
+                </div>
+              </div>
+
+              <!-- Confidence Progress Bar -->
+              <div class="mb-3">
+                <div class="d-flex justify-content-between small mb-1">
+                  <span class="text-muted">AI Hybrid Confidence:</span>
+                  <span class="text-cyan fw-bold" id="res-confidence-val">0%</span>
+                </div>
+                <div class="progress" style="height: 6px; background: rgba(255,255,255,0.08);">
+                  <div class="progress-bar bg-cyan" id="res-confidence-bar" style="width: 0%;"></div>
+                </div>
+              </div>
+
+              <!-- Detected Sensitive Entities -->
+              <div class="mb-3">
+                <div class="small text-muted fw-bold text-uppercase tracking-wider mb-2">
+                  <i class="fas fa-fingerprint text-warning me-1"></i> Detected Sensitive Entities (<span id="res-entity-count">0</span>)
+                </div>
+                <div id="res-entities-list" class="d-flex flex-wrap gap-1" style="max-height: 120px; overflow-y: auto;">
+                  <span class="text-muted small">No sensitive entities discovered.</span>
+                </div>
+              </div>
+
+              <!-- Explainable Reasoning Timeline -->
+              <div class="mb-3">
+                <div class="small text-muted fw-bold text-uppercase tracking-wider mb-2">
+                  <i class="fas fa-list-check text-info me-1"></i> Explainable Decision Factors
+                </div>
+                <div id="res-reasons-list" class="p-2 rounded bg-dark bg-opacity-75 small text-white-50" style="max-height: 140px; overflow-y: auto;">
+                  <!-- Dynamically populated -->
+                </div>
+              </div>
+
+              <!-- SOC Feedback Loop Action -->
+              <div class="pt-2 border-top border-secondary border-opacity-50">
+                <div class="small text-muted mb-2">Continuous Learning Feedback:</div>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-sm btn-outline-success flex-fill" onclick="submitFeedback('TRUE_POSITIVE')">
+                    <i class="fas fa-check me-1"></i> True Positive
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger flex-fill" onclick="submitFeedback('FALSE_POSITIVE')">
+                    <i class="fas fa-xmark me-1"></i> False Positive
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI / ML Models Registry & Accuracy Telemetry -->
+      <div class="glass-card mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div>
+            <h6 class="text-white fw-bold mb-0">
+              <i class="fas fa-cubes-stacked text-cyan me-2"></i>Active AI/ML Model Registry & Precision Metrics
+            </h6>
+            <span class="small text-muted">Auditable performance scores across Central DLP Classifier, Regex+Entropy Detector, and NLP Engines</span>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-dark table-hover align-middle mb-0" style="font-size: 0.85rem;">
+            <thead>
+              <tr class="text-muted text-uppercase tracking-wider">
+                <th>Model Name</th>
+                <th>Version</th>
+                <th>Subsystem Type</th>
+                <th>Precision</th>
+                <th>Recall</th>
+                <th>F1-Score</th>
+                <th>Features / Signatures</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="models-table-body">
+              <tr><td colspan="8" class="text-center text-muted py-3">Loading registered model metadata...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Recent DLP Analyses Stream -->
+      <div class="glass-card mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div>
+            <h6 class="text-white fw-bold mb-0">
+              <i class="fas fa-list-timeline text-cyan me-2"></i>Recent AI DLP Analyses Stream
+            </h6>
+            <span class="small text-muted">Real-time audit log of file, browser, clipboard, and email telemetry analyzed by Central AI</span>
+          </div>
+          <div class="d-flex gap-2">
+            <select class="form-select form-select-sm bg-dark text-white border-secondary" id="filter-classification" onchange="loadAnalysisHistory()">
+              <option value="">All Classifications</option>
+              <option value="HIGHLY_CONFIDENTIAL">Highly Confidential</option>
+              <option value="RESTRICTED">Restricted</option>
+              <option value="CONFIDENTIAL">Confidential</option>
+              <option value="INTERNAL">Internal</option>
+              <option value="PUBLIC">Public</option>
+            </select>
+            <select class="form-select form-select-sm bg-dark text-white border-secondary" id="filter-action" onchange="loadAnalysisHistory()">
+              <option value="">All Actions</option>
+              <option value="BLOCK">BLOCK</option>
+              <option value="WARN">WARN</option>
+              <option value="ALLOW">ALLOW</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-dark table-hover align-middle mb-0" style="font-size: 0.85rem;">
+            <thead>
+              <tr class="text-muted text-uppercase tracking-wider">
+                <th>Timestamp</th>
+                <th>Filename / Target</th>
+                <th>Channel</th>
+                <th>Classification</th>
+                <th>Confidence</th>
+                <th>Entities Found</th>
+                <th>Action</th>
+                <th>Fast Path</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="analyses-table-body">
+              <tr><td colspan="9" class="text-center text-muted py-4">Loading recent AI analyses...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Analysis Detail Modal -->
+  <div class="modal fade" id="analysisDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content bg-dark text-white border-secondary">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title"><i class="fas fa-brain text-cyan me-2"></i>AI Analysis Deep Breakdown</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="modal-analysis-content">
+          Loading details...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/api.js?v=2.3.0"></script>
+  <script src="/static/js/auth.js?v=2.3.0"></script>
+  <script src="/static/js/ai_analysis.js?v=2.3.0"></script>
+</body>
+</html>

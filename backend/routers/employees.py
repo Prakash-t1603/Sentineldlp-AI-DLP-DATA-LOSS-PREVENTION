@@ -20,16 +20,28 @@ router = APIRouter(prefix="/employees", tags=["Employee Directory & Management"]
 
 def _build_employee_response(emp: Employee, db: Session, now: datetime) -> EmployeeResponse:
     """Helper to convert Employee DB model into rich EmployeeResponse with live telemetry."""
-    status_name = fleet_monitor_service.evaluate_employee_status(emp, db, now)
-    diff_secs = max(0, int((now - emp.last_seen.replace(tzinfo=timezone.utc) if emp.last_seen.tzinfo is None else now - emp.last_seen).total_seconds())) if emp.last_seen else None
-    
     # Check linked devices
-    linked_devices = db.query(Device).filter(Device.employee_id == emp.employee_id, Device.is_active == True).all()
-    primary_dev = linked_devices[0].device_id if linked_devices else None
+    linked_devices = db.query(Device).filter(Device.employee_id == emp.employee_id, Device.is_active == True).order_by(Device.last_seen.desc()).all()
+    
+    if linked_devices:
+        status_name = fleet_monitor_service.evaluate_employee_status(emp, db, now)
+        primary_dev = linked_devices[0].device_id
+        effective_ip = linked_devices[0].ip_address or emp.ip_address or "127.0.0.1"
+        effective_os = linked_devices[0].operating_system or emp.operating_system or "Linux"
+        effective_host = linked_devices[0].hostname or emp.hostname or "WORKSTATION"
+        monitoring_status = "ACTIVE" if status_name == "ONLINE" else ("STOPPED" if status_name == "OFFLINE" else "WARNING")
+    else:
+        status_name = "ONLINE" if (emp.last_seen and (now - (emp.last_seen.replace(tzinfo=timezone.utc) if emp.last_seen.tzinfo is None else emp.last_seen)).total_seconds() <= 30) else "OFFLINE"
+        primary_dev = "NOT ASSIGNED"
+        effective_ip = emp.ip_address if emp.ip_address and emp.ip_address not in ["127.0.0.1", "NOT_ASSIGNED"] else "NOT ASSIGNED"
+        effective_os = emp.operating_system if emp.operating_system and emp.operating_system not in ["Windows", "Linux", "NOT_ASSIGNED"] else "NOT ASSIGNED"
+        effective_host = emp.hostname if emp.hostname and emp.hostname not in ["UNKNOWN_HOST", "NOT_ASSIGNED"] else "NOT ASSIGNED"
+        monitoring_status = "NOT REGISTERED" if not emp.last_seen else ("ACTIVE" if status_name == "ONLINE" else "STOPPED")
+
+    diff_secs = max(0, int((now - (emp.last_seen.replace(tzinfo=timezone.utc) if emp.last_seen.tzinfo is None else emp.last_seen)).total_seconds())) if emp.last_seen else None
     
     # Active monitoring modules aggregation
     active_mods = {}
-    monitoring_status = "ACTIVE" if status_name == "ONLINE" else ("STOPPED" if status_name == "OFFLINE" else "WARNING")
     for d in linked_devices:
         if d.active_modules:
             try:
@@ -45,15 +57,15 @@ def _build_employee_response(emp: Employee, db: Session, now: datetime) -> Emplo
         full_name=emp.full_name or emp.username,
         email=emp.email,
         phone_number=emp.phone_number,
-        department=emp.department,
-        designation=emp.designation,
+        department=emp.department or "Engineering",
+        designation=emp.designation or "Endpoint Operator",
         manager=emp.manager,
         location=emp.location,
         joining_date=emp.joining_date,
         active=emp.active,
-        hostname=emp.hostname or (linked_devices[0].hostname if linked_devices else "UNKNOWN_HOST"),
-        ip_address=emp.ip_address or (linked_devices[0].ip_address if linked_devices else "127.0.0.1"),
-        operating_system=emp.operating_system or (linked_devices[0].operating_system if linked_devices else "Windows"),
+        hostname=effective_host,
+        ip_address=effective_ip,
+        operating_system=effective_os,
         status=status_name,
         last_seen=emp.last_seen,
         last_seen_seconds_ago=diff_secs or 0,
@@ -127,6 +139,7 @@ def create_employee(
 ):
     """
     Create a new employee record (Admin only).
+    Initializes employee master record cleanly without fabricating fake devices or false heartbeats.
     """
     existing = db.query(Employee).filter(Employee.employee_id == emp_data.employee_id).first()
     if existing:
@@ -147,11 +160,11 @@ def create_employee(
         manager=emp_data.manager,
         location=emp_data.location or "Office",
         joining_date=emp_data.joining_date or now,
-        hostname=emp_data.hostname or "UNKNOWN_HOST",
-        ip_address=emp_data.ip_address or "127.0.0.1",
-        operating_system=emp_data.operating_system or "Windows",
-        status="ONLINE",
-        last_seen=now,
+        hostname="NOT_ASSIGNED",
+        ip_address="NOT_ASSIGNED",
+        operating_system="NOT_ASSIGNED",
+        status="OFFLINE",
+        last_seen=None,
         created_at=now,
         updated_at=now,
         active=True,
@@ -160,7 +173,7 @@ def create_employee(
     db.add(employee)
     db.commit()
     db.refresh(employee)
-    logger.info(f"Admin {admin_user.username} created new employee: {employee.employee_id} ({employee.full_name})")
+    logger.info(f"Admin {admin_user.username} created new master employee: {employee.employee_id} ({employee.full_name})")
     return _build_employee_response(employee, db, now)
 
 @router.put("/{employee_id}", response_model=EmployeeResponse)
@@ -197,7 +210,7 @@ def get_employee_detail(
 ):
     """
     Retrieve full 360-degree security profile of an employee.
-    Includes Employee Info, Linked Devices, Monitoring Modules, Security Summary, Recent Activity & DLP Events.
+    Includes Employee Info, Linked Devices, Monitoring Modules, Security Summary, Recent Activity, Alerts, Incidents & DLP Events.
     """
     employee = db.query(Employee).filter(Employee.employee_id == employee_id).first()
     if not employee:
@@ -289,9 +302,12 @@ def get_employee_detail(
 
     security_summary = {
         "total_events": total_events,
+        "events": total_events,
+        "dlp_events": len(dlp_events),
         "alerts": len(alerts),
         "incidents": len(incidents),
         "blocked_events": blocked_count,
+        "blocked": blocked_count,
         "warnings": warning_count,
         "risk_score": employee.risk_score,
         "last_security_event": last_event_time
@@ -301,6 +317,8 @@ def get_employee_detail(
         {
             "id": ev.id,
             "event_id": ev.event_id,
+            "employee_id": ev.employee_id,
+            "device_id": ev.device_id,
             "channel": ev.channel,
             "application": ev.application,
             "file_name": ev.file_name,
@@ -325,13 +343,17 @@ def get_employee_detail(
 
     return EmployeeDetailResponse(
         employee=emp_resp,
+        status=emp_resp.status,
         devices=devices_resp,
+        monitoring=active_monitoring_modules,
         monitoring_modules=active_monitoring_modules,
+        statistics=security_summary,
         security_summary=security_summary,
         activities=[ActivityLogResponse.model_validate(a) for a in activities],
         files=[FileRecordResponse.model_validate(f) for f in files],
         alerts=[AlertResponse.model_validate(a) for a in alerts],
         incidents=[IncidentResponse.model_validate(i) for i in incidents],
+        recent_events=dlp_events_formatted,
         dlp_events=dlp_events_formatted,
         risk_history=risk_history
     )
@@ -345,9 +367,12 @@ def get_employee_devices(
     """
     Get all endpoint devices linked to a specific employee.
     """
+    emp = db.query(Employee).filter(Employee.employee_id == employee_id).first()
+    if not emp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Employee '{employee_id}' not found")
+
     now = datetime.now(timezone.utc)
     devices = db.query(Device).filter(Device.employee_id == employee_id, Device.is_active == True).all()
-    emp = db.query(Employee).filter(Employee.employee_id == employee_id).first()
     
     results = []
     for d in devices:
@@ -364,9 +389,9 @@ def get_employee_devices(
             device_id=d.device_id,
             hostname=d.hostname,
             employee_id=d.employee_id,
-            employee_name=emp.full_name if emp else None,
-            employee_username=emp.username if emp else None,
-            employee_department=emp.department if emp else None,
+            employee_name=emp.full_name or emp.username,
+            employee_username=emp.username,
+            employee_department=emp.department,
             username=d.username or "employee_user",
             operating_system=d.operating_system,
             ip_address=d.ip_address,
@@ -383,6 +408,96 @@ def get_employee_devices(
             is_active=d.is_active
         ))
     return results
+
+@router.get("/{employee_id}/alerts", response_model=List[AlertResponse])
+def get_employee_alerts(
+    employee_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_admin)
+):
+    """
+    Get all security alerts associated with an employee.
+    """
+    emp = db.query(Employee).filter(Employee.employee_id == employee_id).first()
+    if not emp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Employee '{employee_id}' not found")
+    alerts = db.query(Alert).filter(Alert.employee_id == employee_id).order_by(Alert.created_at.desc()).all()
+    return [AlertResponse.model_validate(a) for a in alerts]
+
+@router.get("/{employee_id}/incidents", response_model=List[IncidentResponse])
+def get_employee_incidents(
+    employee_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_admin)
+):
+    """
+    Get all security incidents associated with an employee.
+    """
+    emp = db.query(Employee).filter(Employee.employee_id == employee_id).first()
+    if not emp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Employee '{employee_id}' not found")
+    incidents = db.query(Incident).filter(Incident.employee_id == employee_id).order_by(Incident.created_at.desc()).all()
+    return [IncidentResponse.model_validate(i) for i in incidents]
+
+@router.get("/{employee_id}/events")
+def get_employee_events(
+    employee_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_admin)
+):
+    """
+    Get all recent DLP and audit events associated with an employee.
+    """
+    emp = db.query(Employee).filter(Employee.employee_id == employee_id).first()
+    if not emp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Employee '{employee_id}' not found")
+    dlp_events = db.query(DLPEvent).filter(DLPEvent.employee_id == employee_id).order_by(DLPEvent.timestamp.desc()).limit(100).all()
+    activities = db.query(ActivityLog).filter(ActivityLog.employee_id == employee_id).order_by(ActivityLog.timestamp.desc()).limit(100).all()
+    return {
+        "employee_id": employee_id,
+        "dlp_events": [
+            {
+                "id": ev.id,
+                "event_id": ev.event_id,
+                "channel": ev.channel,
+                "application": ev.application,
+                "destination": ev.destination,
+                "file_name": ev.file_name,
+                "risk_score": ev.risk_score,
+                "risk_level": ev.risk_level,
+                "action": ev.action,
+                "timestamp": ev.timestamp.isoformat() if ev.timestamp else "",
+                "details": ev.details
+            }
+            for ev in dlp_events
+        ],
+        "activities": [ActivityLogResponse.model_validate(a).model_dump() for a in activities]
+    }
+
+@router.get("/{employee_id}/status")
+def get_employee_status(
+    employee_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_analyst_or_admin)
+):
+    """
+    Get live connection and sensor health status of an employee.
+    """
+    emp = db.query(Employee).filter(Employee.employee_id == employee_id).first()
+    if not emp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Employee '{employee_id}' not found")
+    now = datetime.now(timezone.utc)
+    resp = _build_employee_response(emp, db, now)
+    return {
+        "employee_id": emp.employee_id,
+        "status": resp.status,
+        "last_seen": resp.last_seen.isoformat() if resp.last_seen else None,
+        "last_seen_seconds_ago": resp.last_seen_seconds_ago,
+        "primary_device_id": resp.primary_device_id,
+        "device_count": resp.device_count,
+        "monitoring_status": resp.monitoring_status,
+        "active_modules": resp.active_modules
+    }
 
 @router.post("/bulk-delete", response_model=EmployeeBulkDeleteResponse)
 def bulk_delete_employees(
@@ -431,9 +546,14 @@ def delete_or_disable_employee(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Employee '{employee_id}' not found")
 
     if hard_delete:
+        db.query(Device).filter(Device.employee_id == employee_id).delete()
+        db.query(Alert).filter(Alert.employee_id == employee_id).delete()
+        db.query(Incident).filter(Incident.employee_id == employee_id).delete()
+        db.query(DLPEvent).filter(DLPEvent.employee_id == employee_id).delete()
+        db.query(ActivityLog).filter(ActivityLog.employee_id == employee_id).delete()
         db.delete(employee)
         db.commit()
-        logger.info(f"Admin {admin_user.username} permanently deleted employee {employee_id}")
+        logger.info(f"Admin {admin_user.username} permanently deleted employee {employee_id} and associated records")
         return {"message": f"Employee '{employee_id}' permanently deleted", "employee_id": employee_id}
     else:
         employee.active = False
@@ -442,42 +562,26 @@ def delete_or_disable_employee(
         logger.info(f"Admin {admin_user.username} deactivated employee {employee_id}")
         return {"message": f"Employee '{employee_id}' deactivated successfully", "employee_id": employee_id}
 
-@router.post("/register", response_model=EmployeeResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=EmployeeResponse, status_code=status.HTTP_200_OK)
 def register_or_update_employee(
     emp_data: EmployeeCreate,
     db: Session = Depends(get_db),
     auth_caller: Optional[User] = Depends(get_current_user_or_agent)
 ):
-    """Legacy/Agent endpoint registration endpoint for backward compatibility."""
+    """Legacy endpoint registration for existing employees."""
     now = datetime.now(timezone.utc)
     employee = db.query(Employee).filter(Employee.employee_id == emp_data.employee_id).first()
-    if employee:
-        employee.hostname = emp_data.hostname or employee.hostname
-        employee.ip_address = emp_data.ip_address or employee.ip_address
-        employee.operating_system = emp_data.operating_system or employee.operating_system
-        employee.status = "ONLINE"
-        employee.last_seen = now
-    else:
-        employee = Employee(
-            employee_id=emp_data.employee_id,
-            username=emp_data.username,
-            full_name=emp_data.full_name or emp_data.username,
-            email=emp_data.email,
-            phone_number=emp_data.phone_number,
-            department=emp_data.department or "General",
-            designation=emp_data.designation or "Employee",
-            hostname=emp_data.hostname or "UNKNOWN_HOST",
-            ip_address=emp_data.ip_address or "127.0.0.1",
-            operating_system=emp_data.operating_system or "Windows",
-            status="ONLINE",
-            last_seen=now,
-            created_at=now,
-            updated_at=now,
-            active=True,
-            risk_score=0.0
+    if not employee:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "EMPLOYEE_NOT_REGISTERED", "message": f"Employee '{emp_data.employee_id}' not found. Admin must register employee first."}
         )
-        db.add(employee)
     
+    employee.hostname = emp_data.hostname or employee.hostname
+    employee.ip_address = emp_data.ip_address or employee.ip_address
+    employee.operating_system = emp_data.operating_system or employee.operating_system
+    employee.status = "ONLINE"
+    employee.last_seen = now
     db.commit()
     db.refresh(employee)
     return _build_employee_response(employee, db, now)
@@ -491,7 +595,10 @@ def employee_heartbeat(
     """Legacy employee heartbeat endpoint."""
     employee = db.query(Employee).filter(Employee.employee_id == employee_id).first()
     if not employee:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee endpoint not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "EMPLOYEE_NOT_REGISTERED", "message": f"Employee endpoint '{employee_id}' not found"}
+        )
     
     now = datetime.now(timezone.utc)
     employee.status = "ONLINE"

@@ -243,11 +243,15 @@ async function handleUploadScan(e) {
 }
 
 function showScanResultModal(res) {
-  document.getElementById("res-filename").textContent = res.filename;
-  document.getElementById("res-classification").innerHTML = formatClassificationTag(res.classification);
-  document.getElementById("res-sensitivity").textContent = `${res.sensitivity_score} / 100`;
-  document.getElementById("res-confidence").textContent = `${Math.round(res.confidence * 100)}%`;
-  document.getElementById("res-risk").innerHTML = formatRiskBadge(res.risk_score);
+  if (!res) return;
+  const setElText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  const setElHtml = (id, val) => { const el = document.getElementById(id); if (el) el.innerHTML = val; };
+
+  setElText("res-filename", res.filename || "N/A");
+  setElHtml("res-classification", formatClassificationTag(res.classification));
+  setElText("res-sensitivity", `${res.sensitivity_score || 0} / 100`);
+  setElText("res-confidence", `${Math.round((res.confidence || 0) * 100)}%`);
+  setElHtml("res-risk", formatRiskBadge(res.risk_score || 0));
 
   const entitiesList = document.getElementById("res-entities-list");
   if (entitiesList) {
@@ -266,8 +270,11 @@ function showScanResultModal(res) {
     }
   }
 
-  const modal = new bootstrap.Modal(document.getElementById("scanResultModal"));
-  modal.show();
+  const modalEl = document.getElementById("scanResultModal");
+  if (modalEl) {
+    const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+    modal.show();
+  }
 }
 
 window.viewFileDetails = function(fileId) {

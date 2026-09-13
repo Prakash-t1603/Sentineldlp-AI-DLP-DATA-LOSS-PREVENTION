@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UEBA Behavioral AI Analytics — SentinelDLP SOC</title>
+  <!-- Google Fonts & FontAwesome -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/dashboard" class="sidebar-brand">
+          <i class="fas fa-shield-halved brand-icon text-cyan"></i>
+          <span class="brand-text">Sentinel<span class="text-cyan">DLP</span></span>
+        </a>
+      </div>
+      <ul class="sidebar-nav">
+        <li class="nav-link-item"><a href="/dashboard"><i class="fas fa-chart-line fa-fw"></i> <span class="nav-text">SOC Overview</span></a></li>
+        <li class="nav-link-item"><a href="/ai-analysis"><i class="fas fa-brain fa-fw"></i> <span class="nav-text">AI DLP Analysis</span></a></li>
+        <li class="nav-link-item active"><a href="/ueba"><i class="fas fa-user-secret fa-fw text-cyan"></i> <span class="nav-text">UEBA Behavioral AI</span></a></li>
+        <li class="nav-link-item"><a href="/alerts"><i class="fas fa-bell fa-fw"></i> <span class="nav-text">Alerts Stream</span></a></li>
+        <li class="nav-link-item"><a href="/alert-history"><i class="fas fa-history fa-fw"></i> <span class="nav-text">Alert History</span></a></li>
+        <li class="nav-link-item"><a href="/incidents"><i class="fas fa-shield-halved fa-fw"></i> <span class="nav-text">Incident Response</span></a></li>
+        <li class="nav-link-item"><a href="/employees"><i class="fas fa-user-shield fa-fw"></i> <span class="nav-text">Endpoint Fleet</span></a></li>
+        <li class="nav-link-item"><a href="/files"><i class="fas fa-folder-tree fa-fw"></i> <span class="nav-text">File Data Lake</span></a></li>
+        <li class="nav-link-item"><a href="/reports"><i class="fas fa-file-invoice fa-fw"></i> <span class="nav-text">Compliance Reports</span></a></li>
+        <li class="nav-link-item"><a href="/settings"><i class="fas fa-sliders fa-fw"></i> <span class="nav-text">DLP Policies</span></a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <div class="d-flex align-items-center gap-2 user-text">
+          <div class="avatar rounded-circle bg-info text-dark fw-bold d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; font-size: 0.8rem;">
+            <i class="fas fa-user-shield"></i>
+          </div>
+          <div>
+            <div class="small fw-bold text-white current-user-name">Analyst</div>
+            <div class="text-muted" style="font-size: 0.7rem;" class="current-user-role">SOC_ADMIN</div>
+          </div>
+        </div>
+        <a href="#" class="text-danger btn-logout" title="Sign Out"><i class="fas fa-right-from-bracket"></i></a>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Topbar -->
+      <div class="topbar">
+        <div>
+          <h1 class="h4 text-white fw-bold mb-1"><i class="fas fa-user-secret text-cyan me-2"></i>User & Entity Behavior Analytics (UEBA)</h1>
+          <p class="small text-muted mb-0">Statistical Baseline Profiling, Z-Score Volume Anomalies, After-Hours Detection & Peer-Group Analysis</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-success bg-opacity-25 text-success border border-success px-3 py-2">
+            <i class="fas fa-chart-line me-1"></i> Statistical Moving Baselines Active
+          </span>
+          <button class="btn btn-sm btn-cyan" onclick="loadUEBASummary(); loadUEBAProfiles(); loadUEBAAnomalies();">
+            <i class="fas fa-arrows-rotate me-1"></i> Refresh Behavioral Feed
+          </button>
+        </div>
+      </div>
+
+      <!-- Fleet-wide Behavioral Health KPIs -->
+      <div class="kpi-grid mb-4">
+        <div class="glass-card kpi-card">
+          <div class="kpi-icon bg-info bg-opacity-25 text-info"><i class="fas fa-users-rectangle"></i></div>
+          <div>
+            <div class="kpi-value" id="kpi-total-profiled">0</div>
+            <div class="kpi-label">Employees Profiled</div>
+          </div>
+        </div>
+
+        <div class="glass-card kpi-card border-success border-opacity-50">
+          <div class="kpi-icon bg-success bg-opacity-25 text-success"><i class="fas fa-user-check"></i></div>
+          <div>
+            <div class="kpi-value text-success" id="kpi-normal-users">0</div>
+            <div class="kpi-label">Conforming Baselines</div>
+          </div>
+        </div>
+
+        <div class="glass-card kpi-card border-warning border-opacity-50">
+          <div class="kpi-icon bg-warning bg-opacity-25 text-warning"><i class="fas fa-user-shield"></i></div>
+          <div>
+            <div class="kpi-value text-warning" id="kpi-suspicious-users">0</div>
+            <div class="kpi-label">Suspicious Deviations</div>
+          </div>
+        </div>
+
+        <div class="glass-card kpi-card border-danger border-opacity-50">
+          <div class="kpi-icon bg-danger bg-opacity-25 text-danger"><i class="fas fa-user-ninja"></i></div>
+          <div>
+            <div class="kpi-value text-danger" id="kpi-critical-anomalies">0</div>
+            <div class="kpi-label">Active Anomalies Flagged</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Employee Baseline Profiler Inspector -->
+      <div class="row g-4 mb-4">
+        <div class="col-lg-4">
+          <div class="glass-card h-100">
+            <h6 class="text-white fw-bold mb-3">
+              <i class="fas fa-address-card text-cyan me-2"></i>Select Employee Profile
+            </h6>
+            <div class="mb-3">
+              <label class="form-label text-muted small">Target Employee</label>
+              <select class="form-select bg-dark text-white border-secondary" id="employee-profile-select" onchange="selectEmployeeProfile(this.value)">
+                <option value="">Loading employee fleet...</option>
+              </select>
+            </div>
+
+            <!-- Profile Summary Card -->
+            <div id="profile-summary-box" class="p-3 rounded-3 bg-dark border border-secondary mb-3">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="small text-muted">Department</span>
+                <span class="badge bg-secondary text-info" id="prof-dept">-</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="small text-muted">Observed History</span>
+                <span class="fw-bold text-white" id="prof-events">0 events</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="small text-muted">Behavioral Status</span>
+                <span class="badge bg-success" id="prof-status-badge">NORMAL</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center">
+                <span class="small text-muted">Current Anomaly Score</span>
+                <span class="fw-bold text-cyan fs-5" id="prof-score">0.00</span>
+              </div>
+            </div>
+
+            <button class="btn btn-outline-info w-100" id="btn-recalc-baseline" onclick="recalculateSelectedBaseline()">
+              <i class="fas fa-calculator me-1"></i> Recalculate Statistical Baseline
+            </button>
+          </div>
+        </div>
+
+        <!-- Statistical Distributions & Peer Comparison -->
+        <div class="col-lg-8">
+          <div class="glass-card h-100">
+            <h6 class="text-white fw-bold mb-3">
+              <i class="fas fa-chart-simple text-cyan me-2"></i>Statistical Behavioral Baseline Metrics
+            </h6>
+
+            <div class="row g-3 mb-4">
+              <div class="col-md-3">
+                <div class="p-3 rounded bg-dark border border-secondary text-center">
+                  <div class="small text-muted">Daily File Ops (Mean &plusmn; &sigma;)</div>
+                  <div class="fs-5 fw-bold text-white mt-1" id="stat-mean-files">0.0 &plusmn; 0.0</div>
+                  <div class="small text-muted mt-1">transfers/day</div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="p-3 rounded bg-dark border border-secondary text-center">
+                  <div class="small text-muted">Daily USB Copy Mean</div>
+                  <div class="fs-5 fw-bold text-warning mt-1" id="stat-mean-usb">0.0</div>
+                  <div class="small text-muted mt-1">copies/day</div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="p-3 rounded bg-dark border border-secondary text-center">
+                  <div class="small text-muted">Cloud & Web Uploads</div>
+                  <div class="fs-5 fw-bold text-info mt-1" id="stat-mean-uploads">0.0</div>
+                  <div class="small text-muted mt-1">uploads/day</div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="p-3 rounded bg-dark border border-secondary text-center">
+                  <div class="small text-muted">After-Hours Ratio</div>
+                  <div class="fs-5 fw-bold text-purple mt-1" id="stat-after-hours">0.0%</div>
+                  <div class="small text-muted mt-1">off-hours activity</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Behavioral Anomaly Indicator Card -->
+            <div class="p-3 rounded bg-dark bg-opacity-75 border border-secondary">
+              <h6 class="text-white small fw-bold text-uppercase tracking-wider mb-2">
+                <i class="fas fa-radar text-cyan me-1"></i> Peer-Group & Baseline Deviation Analysis
+              </h6>
+              <div id="peer-analysis-summary" class="small text-muted">
+                Select an employee from the dropdown to inspect baseline distributions and detect statistical deviations from department peers.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-Time UEBA Behavioral Anomalies Stream -->
+      <div class="glass-card mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div>
+            <h6 class="text-white fw-bold mb-0">
+              <i class="fas fa-triangle-exclamation text-warning me-2"></i>Flagged Behavioral Anomalies Stream
+            </h6>
+            <span class="small text-muted">Real-time alerts triggered by Z-score volume spikes, off-hours exfiltration attempts, and peer deviations</span>
+          </div>
+          <div class="d-flex gap-2">
+            <select class="form-select form-select-sm bg-dark text-white border-secondary" id="filter-anomaly-sev" onchange="loadUEBAAnomalies()">
+              <option value="">All Severities</option>
+              <option value="CRITICAL">Critical</option>
+              <option value="HIGH">High</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="LOW">Low</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-dark table-hover align-middle mb-0" style="font-size: 0.85rem;">
+            <thead>
+              <tr class="text-muted text-uppercase tracking-wider">
+                <th>Timestamp</th>
+                <th>Employee ID</th>
+                <th>Anomaly Type</th>
+                <th>Severity</th>
+                <th>Observed vs Baseline</th>
+                <th>Z-Score Deviation</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody id="anomalies-table-body">
+              <tr><td colspan="7" class="text-center text-muted py-4">Loading behavioral anomalies...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/api.js?v=2.3.0"></script>
+  <script src="/static/js/auth.js?v=2.3.0"></script>
+  <script src="/static/js/ueba.js?v=2.3.0"></script>
+</body>
+</html>

@@ -16,16 +16,19 @@ async function loadExecutiveReport() {
 }
 
 function renderExecutiveSummary(report) {
+  if (!report || !report.metrics) return;
   const m = report.metrics;
-  document.getElementById("rep-endpoints").textContent = m.total_endpoints;
-  document.getElementById("rep-files").textContent = m.monitored_files;
-  document.getElementById("rep-sensitive").textContent = m.sensitive_files_detected;
-  document.getElementById("rep-alerts").textContent = m.total_dlp_alerts;
-  document.getElementById("rep-critical-alerts").textContent = m.critical_alerts;
-  document.getElementById("rep-incidents").textContent = m.total_incidents;
-  document.getElementById("rep-usb").textContent = m.usb_transfers_recorded;
-  document.getElementById("rep-avg-risk").textContent = m.fleet_average_risk_score;
-  document.getElementById("rep-timestamp").textContent = formatDate(report.generated_at);
+  const setElText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val !== undefined && val !== null ? val : "0"; };
+
+  setElText("rep-endpoints", m.total_endpoints);
+  setElText("rep-files", m.monitored_files);
+  setElText("rep-sensitive", m.sensitive_files_detected);
+  setElText("rep-alerts", m.total_dlp_alerts);
+  setElText("rep-critical-alerts", m.critical_alerts);
+  setElText("rep-incidents", m.total_incidents);
+  setElText("rep-usb", m.usb_transfers_recorded);
+  setElText("rep-avg-risk", m.fleet_average_risk_score);
+  setElText("rep-timestamp", formatDate(report.generated_at));
 
   // Top Risk Endpoints
   const tbodyRisk = document.getElementById("rep-top-risk-body");

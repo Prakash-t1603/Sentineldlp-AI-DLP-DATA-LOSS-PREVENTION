@@ -43,6 +43,11 @@ def get_or_create_employee_id():
 
 EMPLOYEE_ID = get_or_create_employee_id()
 USERNAME = os.getlogin() if hasattr(os, "getlogin") else os.environ.get("USERNAME", "employee_user")
+EMPLOYEE_NAME = os.environ.get("EMPLOYEE_NAME") or os.environ.get("FULL_NAME") or USERNAME
+EMPLOYEE_EMAIL = os.environ.get("EMPLOYEE_EMAIL") or os.environ.get("EMAIL") or f"{USERNAME}@company.local"
+EMPLOYEE_DEPT = os.environ.get("EMPLOYEE_DEPT") or os.environ.get("DEPARTMENT") or "Engineering"
+EMPLOYEE_DESIG = os.environ.get("EMPLOYEE_DESIG") or os.environ.get("DESIGNATION") or "Endpoint User"
+EMPLOYEE_PHONE = os.environ.get("EMPLOYEE_PHONE") or ""
 
 # Priority: DLP_SERVER_URL -> SERVER_URL -> BACKEND_URL -> default http://{LOCAL_IP}:8000
 RAW_SERVER_URL = (

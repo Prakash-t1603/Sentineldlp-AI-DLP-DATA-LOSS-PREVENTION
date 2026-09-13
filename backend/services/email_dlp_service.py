@@ -53,18 +53,17 @@ class EmailDLPService:
         Unified processing: Centralized Scanner -> Risk Engine -> Policy Engine -> DLP Event Store -> Alerts.
         """
         emp_id = employee_id or sender.split("@")[0]
-        # Ensure employee exists in database
+        # Resolve master employee if exists in database
         emp = db.query(Employee).filter(Employee.employee_id == emp_id).first()
         if not emp:
-            emp = Employee(
-                employee_id=emp_id,
-                username=sender,
-                hostname=device_id or "EMAIL-CLIENT",
-                status="ONLINE",
-                risk_score=0.0
-            )
-            db.add(emp)
-            db.commit()
+            emp = db.query(Employee).filter(Employee.email == sender).first()
+            if emp:
+                emp_id = emp.employee_id
+            else:
+                # Use first active employee or keep emp_id as identifier without creating ghost record
+                first_emp = db.query(Employee).filter(Employee.active == True).first()
+                if first_emp:
+                    emp_id = first_emp.employee_id
 
         # 1. Determine destination boundary
         is_external = self.is_external_email(recipient)

@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 from backend.database import get_db
 from backend.models import Employee, Alert, ActivityLog, User
 from backend.services.risk_service import risk_service
-from backend.dependencies import require_analyst_or_admin
+from backend.dependencies import require_analyst_or_admin, get_current_user_or_agent
 
 router = APIRouter(prefix="/risk", tags=["Risk & UEBA Analytics"])
 
@@ -52,6 +52,36 @@ def get_fleet_risk_overview(
         "distribution": dist,
         "top_risk_endpoints": top_data
     }
+
+@router.post("/reset-all", status_code=status.HTTP_200_OK)
+def reset_all_risk(
+    db: Session = Depends(get_db),
+    auth_caller: Optional[User] = Depends(get_current_user_or_agent)
+):
+    """Reset UEBA risk scores to 0.0 for all employees across the fleet."""
+    employees = db.query(Employee).all()
+    for emp in employees:
+        emp.risk_score = 0.0
+        if emp.status == "SUSPICIOUS":
+            emp.status = "ONLINE"
+    db.commit()
+    return {"message": f"Successfully reset risk scores for {len(employees)} endpoints", "count": len(employees)}
+
+@router.post("/reset/{employee_id}", status_code=status.HTTP_200_OK)
+def reset_single_employee_risk(
+    employee_id: str,
+    db: Session = Depends(get_db),
+    auth_caller: Optional[User] = Depends(get_current_user_or_agent)
+):
+    """Reset UEBA risk score to 0.0 for a specific employee."""
+    employee = db.query(Employee).filter(Employee.employee_id == employee_id).first()
+    if not employee:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
+    employee.risk_score = 0.0
+    if employee.status == "SUSPICIOUS":
+        employee.status = "ONLINE"
+    db.commit()
+    return {"message": f"Risk score for '{employee_id}' reset to 0.0", "employee_id": employee_id}
 
 @router.get("/employee/{employee_id}")
 def get_employee_ueba(

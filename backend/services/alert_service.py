@@ -18,7 +18,9 @@ class AlertService:
         file_id: Optional[int] = None,
         risk_score: float = 0.0,
         severity: Optional[str] = None,
-        auto_create_incident: bool = True
+        auto_create_incident: bool = True,
+        device_id: Optional[str] = None,
+        event_id: Optional[str] = None
     ) -> Alert:
         """
         Create a new security Alert, update employee risk score,
@@ -28,23 +30,25 @@ class AlertService:
         if not severity:
             severity = risk_service.get_risk_level(risk_score)
 
-        # 1. Ensure employee exists
+        # 1. Resolve master employee
         employee = db.query(Employee).filter(Employee.employee_id == employee_id).first()
+        if not employee and device_id:
+            dev = db.query(Device).filter(Device.device_id == device_id).first()
+            if dev and dev.employee_id:
+                employee = db.query(Employee).filter(Employee.employee_id == dev.employee_id).first()
+                if employee:
+                    employee_id = employee.employee_id
         if not employee:
-            employee = Employee(
-                employee_id=employee_id,
-                username=employee_id,
-                hostname="UNKNOWN_ENDPOINT",
-                status="ONLINE",
-                risk_score=risk_score
-            )
-            db.add(employee)
-            db.commit()
-            db.refresh(employee)
+            first_emp = db.query(Employee).filter(Employee.active == True).first()
+            if first_emp:
+                employee = first_emp
+                employee_id = first_emp.employee_id
 
         # 2. Insert Alert
         new_alert = Alert(
             employee_id=employee_id,
+            device_id=device_id,
+            event_id=event_id,
             file_id=file_id,
             alert_type=alert_type,
             severity=severity,

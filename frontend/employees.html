@@ -22,8 +22,11 @@
       </div>
       <ul class="nav-links">
         <li class="nav-link-item"><a href="/dashboard"><i class="fas fa-chart-pie fa-fw"></i> <span class="nav-text">SOC Dashboard</span></a></li>
-        <li class="nav-link-item active"><a href="/employees"><i class="fas fa-users-gear fa-fw"></i> <span class="nav-text">Employees</span></a></li>
-        <li class="nav-link-item"><a href="/alerts"><i class="fas fa-bell fa-fw"></i> <span class="nav-text">Alerts</span></a></li>
+        <li class="nav-link-item"><a href="/ai-analysis"><i class="fas fa-brain fa-fw text-cyan"></i> <span class="nav-text">AI DLP Analysis</span></a></li>
+        <li class="nav-link-item"><a href="/ueba"><i class="fas fa-user-secret fa-fw text-info"></i> <span class="nav-text">UEBA Behavioral AI</span></a></li>
+        <li class="nav-link-item"><a href="/dlp-simulation"><i class="fas fa-flask-vial fa-fw text-warning"></i> <span class="nav-text">DLP Simulator</span></a></li>
+        <li class="nav-link-item active"><a href="/employees"><i class="fas fa-users-gear fa-fw"></i> <span class="nav-text">Endpoints & Fleet</span></a></li>
+        <li class="nav-link-item"><a href="/alerts"><i class="fas fa-bell fa-fw"></i> <span class="nav-text">Live Alerts</span></a></li>
         <li class="nav-link-item"><a href="/alert-history"><i class="fas fa-clock-rotate-left fa-fw"></i> <span class="nav-text">Alert History</span></a></li>
         <li class="nav-link-item"><a href="/incidents"><i class="fas fa-biohazard fa-fw"></i> <span class="nav-text">Incidents</span></a></li>
         <li class="nav-link-item"><a href="/files"><i class="fas fa-folder-tree fa-fw"></i> <span class="nav-text">File Data Lake</span></a></li>
@@ -285,19 +288,66 @@
             </div>
           </div>
 
-          <!-- SECTION E: Recent Activity & DLP Events -->
-          <div class="glass-card">
-            <h6 class="text-cyan fw-bold mb-3"><i class="fas fa-clock-rotate-left me-2"></i>E. Recent Security & Audit Events</h6>
-            <div class="table-responsive" style="max-height: 240px; overflow-y: auto;">
+          <!-- SECTION E: Security Alerts -->
+          <div class="glass-card mb-4">
+            <h6 class="text-warning fw-bold mb-3"><i class="fas fa-bell me-2"></i>E. Security Alerts (<span id="profile-alerts-count">0</span>)</h6>
+            <div class="table-responsive" style="max-height: 220px; overflow-y: auto;">
               <table class="table-custom align-middle mb-0">
                 <thead>
                   <tr>
-                    <th>Time</th>
-                    <th>Channel / Type</th>
-                    <th>File / Details</th>
-                    <th>Destination</th>
+                    <th>Alert ID / Time</th>
                     <th>Severity</th>
+                    <th>Alert Type</th>
+                    <th>Source / Channel</th>
+                    <th>Description</th>
+                    <th>Risk</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="profile-alerts-body">
+                  <!-- Populated via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SECTION F: Security Incidents -->
+          <div class="glass-card mb-4">
+            <h6 class="text-danger fw-bold mb-3"><i class="fas fa-biohazard me-2"></i>F. Security Incidents (<span id="profile-incidents-count">0</span>)</h6>
+            <div class="table-responsive" style="max-height: 180px; overflow-y: auto;">
+              <table class="table-custom align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Incident ID</th>
+                    <th>Severity</th>
+                    <th>Title / Summary</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Updated / Resolved</th>
+                  </tr>
+                </thead>
+                <tbody id="profile-incidents-body">
+                  <!-- Populated via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SECTION G: Recent DLP Events -->
+          <div class="glass-card">
+            <h6 class="text-cyan fw-bold mb-3"><i class="fas fa-shield-halved me-2"></i>G. Recent DLP Events & Audit Stream (<span id="profile-dlp-count">0</span>)</h6>
+            <div class="table-responsive" style="max-height: 220px; overflow-y: auto;">
+              <table class="table-custom align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Event ID / Time</th>
+                    <th>Channel</th>
+                    <th>Application</th>
+                    <th>Destination</th>
+                    <th>File Name</th>
+                    <th>Risk Score</th>
                     <th>Action</th>
+                    <th>Status</th>
                   </tr>
                 </thead>
                 <tbody id="profile-recent-events-body">
@@ -316,8 +366,8 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="/static/js/api.js"></script>
-  <script src="/static/js/auth.js"></script>
-  <script src="/static/js/employees.js"></script>
+  <script src="/static/js/api.js?v=2.2.0"></script>
+  <script src="/static/js/auth.js?v=2.2.0"></script>
+  <script src="/static/js/employees.js?v=2.2.0"></script>
 </body>
 </html>

@@ -61,9 +61,55 @@ def run_auto_migrations():
         "updated_at": "DATETIME"
     }
 
+    alert_cols = {
+        "device_id": "VARCHAR(128)",
+        "event_id": "VARCHAR(64)"
+    }
+
     with engine.connect() as conn:
         # Check employees table
         if "employees" in table_names:
+            cols = {c["name"]: c for c in inspector.get_columns("employees")}
+            if "last_seen" in cols and not cols["last_seen"]["nullable"]:
+                try:
+                    conn.execute(text("PRAGMA foreign_keys=OFF"))
+                    conn.execute(text("""
+                        CREATE TABLE IF NOT EXISTS employees_migrated (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            employee_id VARCHAR(64) NOT NULL UNIQUE,
+                            full_name VARCHAR(128),
+                            email VARCHAR(128),
+                            phone_number VARCHAR(32),
+                            department VARCHAR(64),
+                            designation VARCHAR(64),
+                            username VARCHAR(64) NOT NULL,
+                            status VARCHAR(32) NOT NULL DEFAULT 'OFFLINE',
+                            manager VARCHAR(128),
+                            location VARCHAR(128),
+                            joining_date DATETIME,
+                            created_at DATETIME NOT NULL,
+                            updated_at DATETIME NOT NULL,
+                            active BOOLEAN NOT NULL DEFAULT 1,
+                            hostname VARCHAR(128) DEFAULT 'NOT_ASSIGNED',
+                            ip_address VARCHAR(64) DEFAULT 'NOT_ASSIGNED',
+                            operating_system VARCHAR(64) DEFAULT 'NOT_ASSIGNED',
+                            last_seen DATETIME,
+                            risk_score FLOAT NOT NULL DEFAULT 0.0
+                        )
+                    """))
+                    conn.execute(text("""
+                        INSERT OR IGNORE INTO employees_migrated (id, employee_id, full_name, email, phone_number, department, designation, username, status, manager, location, joining_date, created_at, updated_at, active, hostname, ip_address, operating_system, last_seen, risk_score)
+                        SELECT id, employee_id, full_name, email, phone_number, department, designation, username, status, manager, location, joining_date, created_at, updated_at, active, hostname, ip_address, operating_system, last_seen, risk_score FROM employees
+                    """))
+                    conn.execute(text("DROP TABLE employees"))
+                    conn.execute(text("ALTER TABLE employees_migrated RENAME TO employees"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_employees_employee_id ON employees (employee_id)"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_employees_username ON employees (username)"))
+                    conn.execute(text("PRAGMA foreign_keys=ON"))
+                    conn.commit()
+                except Exception:
+                    pass
+
             existing_cols = {c["name"] for c in inspector.get_columns("employees")}
             for col_name, col_type in employee_cols.items():
                 if col_name not in existing_cols:
@@ -80,6 +126,17 @@ def run_auto_migrations():
                 if col_name not in existing_cols:
                     try:
                         conn.execute(text(f"ALTER TABLE devices ADD COLUMN {col_name} {col_type}"))
+                        conn.commit()
+                    except Exception:
+                        pass
+
+        # Check alerts table
+        if "alerts" in table_names:
+            existing_cols = {c["name"] for c in inspector.get_columns("alerts")}
+            for col_name, col_type in alert_cols.items():
+                if col_name not in existing_cols:
+                    try:
+                        conn.execute(text(f"ALTER TABLE alerts ADD COLUMN {col_name} {col_type}"))
                         conn.commit()
                     except Exception:
                         pass

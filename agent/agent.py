@@ -65,10 +65,20 @@ class SentinelAgent:
         server_url: Optional[str] = None,
         employee_id: Optional[str] = None,
         device_id: Optional[str] = None,
+        full_name: Optional[str] = None,
+        email: Optional[str] = None,
+        department: Optional[str] = None,
+        designation: Optional[str] = None,
+        phone_number: Optional[str] = None,
         browser_port: int = 8765
     ):
         self.employee_id = employee_id or EMPLOYEE_ID
         self.username = USERNAME
+        self.full_name = full_name or os.environ.get("EMPLOYEE_NAME") or USERNAME
+        self.email = email or os.environ.get("EMPLOYEE_EMAIL") or f"{USERNAME}@company.local"
+        self.department = department or os.environ.get("EMPLOYEE_DEPT") or "Engineering"
+        self.designation = designation or os.environ.get("EMPLOYEE_DESIG") or "Endpoint User"
+        self.phone_number = phone_number or os.environ.get("EMPLOYEE_PHONE") or ""
         self.hostname = HOSTNAME
         self.ip_address = LOCAL_IP
         self.os_name = OS_NAME
@@ -109,8 +119,15 @@ class SentinelAgent:
 
     def register_endpoint(self) -> bool:
         """Register endpoint device with the Central SentinelDLP Server."""
-        logger.info(f"Registering endpoint '{self.device_id}' (Employee: {self.employee_id}) with Central Server at {self.server_url}...")
-        success = self.api_client.register(employee_id=self.employee_id)
+        logger.info(f"Registering endpoint '{self.device_id}' (Employee: {self.employee_id}, Name: {self.full_name}, Dept: {self.department}) with Central Server at {self.server_url}...")
+        success = self.api_client.register(
+            employee_id=self.employee_id,
+            full_name=self.full_name,
+            email=self.email,
+            department=self.department,
+            designation=self.designation,
+            phone_number=self.phone_number
+        )
         if success:
             self.device_id = self.api_client.device_id
             logger.info(f"✅ Device registered successfully. Token issued for Device ID: {self.device_id}")
@@ -127,6 +144,10 @@ class SentinelAgent:
         self.api_client.send_heartbeat(
             status="ONLINE",
             employee_id=self.employee_id,
+            full_name=self.full_name,
+            email=self.email,
+            department=self.department,
+            designation=self.designation,
             monitoring_status="ACTIVE",
             active_modules=self.get_active_modules(),
             metrics=metrics
@@ -236,8 +257,9 @@ class SentinelAgent:
         """
         if isinstance(channel_or_dict, dict):
             event_payload = dict(channel_or_dict)
-            event_payload.setdefault("employee_id", self.employee_id)
-            event_payload.setdefault("device_id", self.device_id)
+            # Enforce the agent's real provisioned employee_id and device_id
+            event_payload["employee_id"] = self.employee_id
+            event_payload["device_id"] = self.device_id
         else:
             event_payload = {
                 "employee_id": self.employee_id,
@@ -332,18 +354,70 @@ class SentinelAgent:
         logger.info("SentinelDLP Agent shutdown complete.")
 
 
-def run_agent(server_url: Optional[str] = None, employee_id: Optional[str] = None, device_id: Optional[str] = None, browser_port: int = 8765):
+def run_agent(
+    server_url: Optional[str] = None,
+    employee_id: Optional[str] = None,
+    device_id: Optional[str] = None,
+    full_name: Optional[str] = None,
+    email: Optional[str] = None,
+    department: Optional[str] = None,
+    designation: Optional[str] = None,
+    phone_number: Optional[str] = None,
+    browser_port: int = 8765
+):
     parser = argparse.ArgumentParser(description="SentinelDLP Enterprise Endpoint Agent")
     parser.add_argument("--server-url", default=None, help="Central DLP Server URL (e.g. http://127.0.0.1:8000)")
-    parser.add_argument("--employee-id", default=None, help="Assigned Employee ID")
+    parser.add_argument("--employee-id", default=None, help="Assigned Employee ID (e.g. EMP-001)")
     parser.add_argument("--device-id", default=None, help="Custom Device ID")
+    parser.add_argument("--name", "--full-name", dest="full_name", default=None, help="Employee Full Name")
+    parser.add_argument("--email", default=None, help="Employee Corporate Email")
+    parser.add_argument("--dept", "--department", dest="department", default=None, help="Department Name")
+    parser.add_argument("--desig", "--designation", dest="designation", default=None, help="Job Designation / Role")
+    parser.add_argument("--phone", default=None, help="Contact Phone Number")
     parser.add_argument("--browser-port", type=int, default=8765, help="Local Browser Extension Receiver Port")
+    parser.add_argument("-i", "--interactive", action="store_true", help="Interactive terminal configuration prompt")
     args, _ = parser.parse_known_args()
 
+    s_url = server_url or args.server_url or os.environ.get("DLP_SERVER_URL") or os.environ.get("SERVER_URL") or SERVER_URL
+    e_id = employee_id or args.employee_id or os.environ.get("EMPLOYEE_ID") or EMPLOYEE_ID
+    d_id = device_id or args.device_id
+    f_name = full_name or args.full_name or os.environ.get("EMPLOYEE_NAME") or os.environ.get("FULL_NAME") or USERNAME
+    e_mail = email or args.email or os.environ.get("EMPLOYEE_EMAIL") or os.environ.get("EMAIL") or f"{USERNAME}@company.local"
+    d_ept = department or args.department or os.environ.get("EMPLOYEE_DEPT") or os.environ.get("DEPARTMENT") or "Engineering"
+    d_esig = designation or args.designation or os.environ.get("EMPLOYEE_DESIG") or os.environ.get("DESIGNATION") or "Endpoint User"
+    p_hone = phone_number or args.phone or os.environ.get("EMPLOYEE_PHONE") or ""
+
+    if args.interactive and sys.stdin.isatty():
+        print("=" * 65)
+        print("  🛡️ SentinelDLP Endpoint Agent - Interactive Setup")
+        print("=" * 65)
+        try:
+            val = input(f"Central DLP Server URL [{s_url}]: ").strip()
+            if val: s_url = val
+            val = input(f"Employee ID [{e_id}]: ").strip()
+            if val: e_id = val
+            val = input(f"Full Name [{f_name}]: ").strip()
+            if val: f_name = val
+            val = input(f"Email ID [{e_mail}]: ").strip()
+            if val: e_mail = val
+            val = input(f"Department [{d_ept}]: ").strip()
+            if val: d_ept = val
+            val = input(f"Designation [{d_esig}]: ").strip()
+            if val: d_esig = val
+            print("-" * 65)
+        except (KeyboardInterrupt, EOFError):
+            print("\nSetup aborted.")
+            sys.exit(0)
+
     agent = SentinelAgent(
-        server_url=server_url or args.server_url,
-        employee_id=employee_id or args.employee_id,
-        device_id=device_id or args.device_id,
+        server_url=s_url,
+        employee_id=e_id,
+        device_id=d_id,
+        full_name=f_name,
+        email=e_mail,
+        department=d_ept,
+        designation=d_esig,
+        phone_number=p_hone,
         browser_port=browser_port if browser_port != 8765 else args.browser_port
     )
 

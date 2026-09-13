@@ -1,0 +1,13 @@
+{
+  "organization": "Sentinel Corp",
+  "classification": "CONFIDENTIAL",
+  "api_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+  "db_connection": "postgresql://admin:secretPass123!@db.internal:5432/main",
+  "employees": [
+    {
+      "id": "EMP-501",
+      "name": "Eve Davis",
+      "salary": "$135,000"
+    }
+  ]
+}

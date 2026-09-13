@@ -34,6 +34,7 @@ def register_agent_device(
         device_id=device.device_id,
         device_token=device_token,
         status=device.status,
+        employee_id=device.employee_id,
         server_time=datetime.now(timezone.utc),
         heartbeat_interval_seconds=15,
         message=f"Endpoint device '{device.device_id}' registered successfully"
@@ -175,22 +176,62 @@ def get_device_detail(
         is_active=device.is_active
     )
 
+@router.delete("/clear-all", status_code=status.HTTP_200_OK)
+def clear_all_devices(
+    db: Session = Depends(get_db),
+    auth_caller: Optional[User] = Depends(get_current_user_or_agent)
+):
+    """
+    Purge all registered endpoint devices from the database.
+    """
+    deleted_count = db.query(Device).delete()
+    db.commit()
+    logger.info(f"Purged all {deleted_count} fleet endpoint devices.")
+    return {"message": f"Successfully removed all {deleted_count} fleet devices", "deleted_count": deleted_count}
+
+@router.delete("/clear-offline", status_code=status.HTTP_200_OK)
+def clear_offline_devices(
+    db: Session = Depends(get_db),
+    auth_caller: Optional[User] = Depends(get_current_user_or_agent)
+):
+    """
+    Purge all offline / inactive devices from the fleet.
+    """
+    now = datetime.now(timezone.utc)
+    devices = db.query(Device).all()
+    deleted_ids = []
+    for d in devices:
+        status_name, _ = agent_service.evaluate_device_status(d.last_seen, now)
+        if status_name == "OFFLINE" or not d.is_active:
+            deleted_ids.append(d.device_id)
+            db.delete(d)
+    db.commit()
+    logger.info(f"Purged {len(deleted_ids)} offline fleet devices: {deleted_ids}")
+    return {"message": f"Successfully removed {len(deleted_ids)} offline device(s)", "deleted_count": len(deleted_ids), "deleted_ids": deleted_ids}
+
 @router.delete("/{device_id}", status_code=status.HTTP_200_OK)
 def deregister_device(
     device_id: str,
+    hard_delete: bool = Query(True),
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin)
+    auth_caller: Optional[User] = Depends(get_current_user_or_agent)
 ):
     """
-    Deregister and deactivate an endpoint device (Admin only).
+    Deregister and delete an endpoint device.
     """
     device = db.query(Device).filter(Device.device_id == device_id).first()
     if not device:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Device '{device_id}' not found")
 
-    device.is_active = False
-    device.status = "OFFLINE"
-    device.monitoring_status = "STOPPED"
-    db.commit()
-    logger.info(f"Admin {admin_user.username} deactivated device {device_id}")
-    return {"message": f"Device '{device_id}' deregistered successfully", "device_id": device_id}
+    if hard_delete:
+        db.delete(device)
+        db.commit()
+        logger.info(f"Deleted device {device_id}")
+        return {"message": f"Device '{device_id}' permanently deleted", "device_id": device_id}
+    else:
+        device.is_active = False
+        device.status = "OFFLINE"
+        device.monitoring_status = "STOPPED"
+        db.commit()
+        logger.info(f"Deactivated device {device_id}")
+        return {"message": f"Device '{device_id}' deregistered successfully", "device_id": device_id}

@@ -1,0 +1,334 @@
+================================================================================
+                    SENTINELDLP AI - DETECTION & RISK SCORING RULES
+================================================================================
+Document: SentinelDLP File Detection, Content Extraction & Risk Scoring Engine Reference
+Version:  2.4.0 (Enterprise Production Specification)
+Target:   Endpoint Protection Agents, Browser Extension, Central AI Pipeline & SOC
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1. OVERVIEW & DETECTION LIFECYCLE
+2. MULTI-CHANNEL INGESTION & CONTENT ACQUISITION
+   2.1 Browser File Upload, Drag-and-Drop & Paste Interception
+   2.2 Removable USB Storage Watchdog
+   2.3 Corporate Email & MIME Attachment Inspection
+   2.4 Clipboard & Monitored Directory Watchdog
+3. MULTI-FORMAT CONTENT EXTRACTION ENGINE
+   3.1 Image OCR Engine (.png, .jpg, .jpeg, .tiff, .bmp, .webp)
+   3.2 Scanned & Vector PDF Parsing (.pdf)
+   3.3 Spreadsheet Cell-by-Cell Extraction (.xlsx, .xls)
+   3.4 Structured Data Parsing (.csv, .tsv)
+   3.5 Word Processing Documents (.docx)
+   3.6 Configuration, Secrets & Source Code (.json, .env, .txt, .sql, .py, .key)
+   3.7 Large File Limits & Safety Boundaries (50MB Guard)
+4. SENSITIVE ENTITY DETECTION RULES & CATEGORIES
+   4.1 Identity Data (Aadhaar, PAN, SSN, Passports, Driving Licenses)
+   4.2 Financial Information (Credit Cards, IBAN, SWIFT, Crypto, Bank Accounts)
+   4.3 Credentials & API Secrets (AWS Keys, RSA/SSH Keys, JWTs, DB URIs, Tokens)
+   4.4 Corporate & Intellectual Property (Employee IDs, Salaries, Trade Secrets)
+   4.5 Personal Identifiable Information (PII) (Emails, Phone Numbers, DOB)
+   4.6 Healthcare Data (MRN, Health Insurance IDs)
+   4.7 Algorithmic Checksums & Shannon Entropy Validation
+5. NATURAL LANGUAGE PROCESSING (NLP) & CONTEXT EVALUATION
+6. MACHINE LEARNING (ML) CLASSIFICATION TIERS
+7. USER AND ENTITY BEHAVIOR ANALYTICS (UEBA)
+8. COMPOSITE RISK SCORING FORMULA & MATHEMATICAL WEIGHTS
+9. POLICY GOVERNANCE & ENFORCEMENT MATRIX (ALLOW / WARN / BLOCK)
+10. FAST-PATH SHA-256 CONTENT HASH CACHING
+11. DATA MINIMIZATION & PRIVACY PROTOCOLS
+
+================================================================================
+1. OVERVIEW & DETECTION LIFECYCLE
+================================================================================
+
+SentinelDLP uses a synchronous, content-first inspection model. No file transfer 
+decision is rendered based solely on filename, extension, file size, or channel 
+metadata. Every file transfer follows an 8-stage inspection lifecycle:
+
+  Stage 1: Ingestion & Permitted Byte Acquisition (Browser / USB / Email / Local)
+  Stage 2: Fast-Path SHA-256 Content Hash Cache Check
+  Stage 3: Multi-Format Content Extraction & OCR (Images / Scanned PDFs / Documents)
+  Stage 4: Modular Sensitive Entity Detection (Regex + Algorithmic Validation)
+  Stage 5: NLP Context, Confidentiality Markers & Exfiltration Intent Evaluation
+  Stage 6: Machine Learning TF-IDF Multi-Tier Sensitivity Classification
+  Stage 7: UEBA Behavioral Anomaly Profiling (Z-score & After-hours Analysis)
+  Stage 8: Multi-Factor Composite Risk Calculation & Real-Time Policy Enforcement
+           (ALLOW / WARN / BLOCK -> SOC Telemetry & Alerting)
+
+================================================================================
+2. MULTI-CHANNEL INGESTION & CONTENT ACQUISITION
+================================================================================
+
+2.1 Browser File Upload, Drag-and-Drop & Paste Interception
+-----------------------------------------------------------
+- The SentinelDLP Browser Extension (Manifest V3) hooks three DOM event vectors:
+  1. `<input type="file">` change events (standard file upload pickers)
+  2. Drag-and-drop `drop` events across all browser window boundaries
+  3. Clipboard `paste` events containing file objects or image data
+- Clean Content Encoding: Files are read via `FileReader.readAsDataURL(file)`. 
+  The raw binary stream is converted to pure Base64 without string character 
+  corruption or URI mangling.
+- Controlled Enforcement Point: The extension transmits the intercepted payload 
+  to the Local Endpoint Agent receiver at `http://127.0.0.1:8765/browser-event`.
+- Active Blocking: If Central DLP returns `action: "BLOCK"`, the extension 
+  immediately empties `inputElement.value = ""` and displays a real-time toast.
+
+2.2 Removable USB Storage Watchdog
+----------------------------------
+- Endpoint watchdog monitors mount points (`/media/*`, `/run/media/*`, `D:\`, `E:\`).
+- New or modified files on removable media trigger immediate read lock, SHA-256 
+  calculation, content extraction, and synchronous AI classification before allow.
+
+2.3 Corporate Email & MIME Attachment Inspection
+------------------------------------------------
+- Outlook, Gmail, and SMTP MIME streams are parsed. Email body text and binary 
+  attachments are routed through the extraction and classification pipeline.
+
+2.4 Clipboard & Monitored Directory Watchdog
+--------------------------------------------
+- Cross-application clipboard copy operations containing text or images exceeding 
+  sensitivity thresholds trigger real-time telemetry and policy alerts.
+
+================================================================================
+3. MULTI-FORMAT CONTENT EXTRACTION ENGINE
+================================================================================
+
+3.1 Image OCR Engine (.png, .jpg, .jpeg, .tiff, .bmp, .webp)
+------------------------------------------------------------
+- Multi-tier OCR processing:
+  * Image Preprocessing: Grayscale conversion, contrast boost (1.8x), sharpening.
+  * Tier 1 (PyTesseract / Tesseract Binary): Full optical character extraction.
+  * Tier 2 (Image Metadata & Text Chunks): Inspects PNG text chunks, EXIF fields.
+  * Tier 3 (Native WinOCR / EasyOCR): Platform-specific hardware-accelerated OCR.
+- Returns `ocr_used: true`, `ocr_confidence`, and transcribed selectable text.
+
+3.2 Scanned & Vector PDF Parsing (.pdf)
+---------------------------------------
+- Tier 1: PyPDF direct stream extraction across multi-page documents (up to 30 pages).
+- Tier 2: If page text is empty (scanned document), extracts embedded images from 
+  each page and invokes the OCR engine.
+- Tier 3: Reads PDF document metadata (`/Title`, `/Subject`, `/Author`, `/Keywords`).
+
+3.3 Spreadsheet Cell-by-Cell Extraction (.xlsx, .xls)
+-----------------------------------------------------
+- Uses `openpyxl` in read-only data mode.
+- Extracts worksheets, column headers, and cell values row-by-row.
+- Formats rows as structured key-value pairs (e.g., `Name: Alice | Salary: $145,000`).
+- Prevents loading massive raw datasets into database memory while exposing PII.
+
+3.4 Structured Data Parsing (.csv, .tsv)
+----------------------------------------
+- Auto-detects delimiters (comma, tab, semicolon, pipe).
+- Associates column headers with each row value for accurate field identification.
+
+3.5 Word Processing Documents (.docx)
+-------------------------------------
+- Extracts body paragraphs, table cells, headers, and footers via `python-docx`.
+
+3.6 Configuration, Secrets & Source Code (.json, .env, .txt, .sql, .py, .key)
+-----------------------------------------------------------------------------
+- JSON: Recursively flattens nested dictionaries and arrays.
+- Text & Code: Scans UTF-8 / Latin-1 encoded files for secrets and keys.
+
+3.7 Large File Limits & Safety Boundaries (50MB Guard)
+------------------------------------------------------
+- Hard limit: `MAX_ANALYSIS_FILE_SIZE = 50 * 1024 * 1024` (50MB).
+- Files exceeding 50MB return status `CONTENT_ANALYSIS_LIMIT_EXCEEDED` and undergo 
+  metadata + hash inspection without crashing agent or central server.
+
+================================================================================
+4. SENSITIVE ENTITY DETECTION RULES & CATEGORIES
+================================================================================
+
+4.1 Identity Data (Category: IDENTITY)
+--------------------------------------
+- AADHAAR: 12-digit Indian national identity numbers (`XXXX-XXXX-XXXX` or 
+  `XXXX XXXX XXXX`). Validated using the **Verhoeff Checksum Algorithm** (Dihedral 
+  group D5 permutation).
+- IDENTITY_CARD: Generic government/national/citizen identity identifiers.
+- PAN_CARD: Indian Income Tax PAN (`[A-Z]{5}[0-9]{4}[A-Z]{1}`) with 4th character 
+  taxpayer status validation (C=Company, P=Person, H=HUF, F=Firm, etc.).
+- SSN: US Social Security Numbers (`XXX-XX-XXXX`) with area/group rule validation.
+- PASSPORT: US and International passport numbers.
+- DRIVING_LICENSE: State-issued driver license alphanumeric patterns.
+
+4.2 Financial Information (Category: FINANCIAL)
+-----------------------------------------------
+- CREDIT_CARD: Visa, MasterCard, Amex, Discover, Diners, JCB, RuPay numbers. 
+  Strictly validated using the **Luhn Checksum Algorithm** (Modulo 10).
+- IBAN: International Bank Account Numbers (15-34 characters with ISO country prefix).
+- SWIFT_BIC: 8 or 11 character Business Identifier Codes.
+- CRYPTO_WALLET: Bitcoin (Legacy 1/3, SegWit bc1) and Ethereum (0x 40-hex) addresses.
+- BANK_ACCOUNT: Financial account identifiers preceded by banking keywords.
+
+4.3 Credentials & API Secrets (Category: CREDENTIALS)
+-----------------------------------------------------
+- AWS_ACCESS_KEY: Standard 20-character key starting with `AKIA...`.
+- AWS_SECRET_KEY: 40-character base64 secret key with **Shannon Entropy > 3.8**.
+- RSA_PRIVATE_KEY / PRIVATE_KEY_HEADER: PEM/OpenSSH private key blocks.
+- JWT_TOKEN: Base64URL-encoded three-part tokens (`eyJ...eyJ...`) with **Entropy > 4.0**.
+- GENERIC_API_KEY: Hex/Alphanumeric tokens (24-64 chars) with **Entropy > 3.5**.
+- PASSWORD_IN_CONFIG: Hardcoded passwords in configuration key-value assignments.
+- DATABASE_URI: Connection strings for PostgreSQL, MySQL, MongoDB, Redis, MSSQL.
+
+4.4 Corporate & Intellectual Property (Category: CORPORATE)
+-----------------------------------------------------------
+- EMPLOYEE_ID: Corporate staff badge identifiers (`EMP-XXXXX`, `EMP_XXXXX`).
+- SALARY_COMPENSATION: Compensation amounts (`Salary: $145,000`, `₹18,00,000`, `CTC:`).
+- CONFIDENTIALITY_NOTICE: Authoritative markers (`STRICTLY CONFIDENTIAL`, 
+  `TOP SECRET`, `TRADE SECRET`, `PROPRIETARY AND CONFIDENTIAL`, `RESTRICTED ACCESS`).
+- MERGER_ACQUISITION: M&A target documentation, NDAs, confidential term sheets.
+- SOURCE_CODE_SECRETS: Hardcoded secret keys in code repositories.
+
+4.5 Personal Identifiable Information (Category: PERSONAL)
+----------------------------------------------------------
+- EMAIL: Standard RFC email addresses (filtering out web asset false-positives).
+- PHONE_NUMBER: International (E.164) and domestic telephone numbers (10-15 digits).
+- DATE_OF_BIRTH: Date of birth formats (`DOB: DD/MM/YYYY`, `MM-DD-YYYY`).
+- PERSON_NAME: Full names in structured forms (`Name: Firstname Lastname`).
+
+4.6 Healthcare Data (Category: HEALTH)
+--------------------------------------
+- MEDICAL_RECORD_NUMBER: Patient MRN and clinical identifiers.
+- HEALTH_INSURANCE_ID: Policy numbers, Member IDs, and RxBIN healthcare codes.
+
+4.7 Algorithmic Checksums & Shannon Entropy Validation
+------------------------------------------------------
+- Luhn Modulo-10: Doubles every second digit from right to left, subtracts 9 if >9, 
+  and checks if total sum mod 10 == 0. Discards credit card false-positives.
+- Verhoeff Checksum: Uses dihedral group multiplication and inverse permutation 
+  tables to detect single-digit errors and transpositions in Aadhaar numbers.
+- Shannon Entropy:
+    $$H(X) = -\sum_{i=1}^{n} P(x_i) \log_2 P(x_i)$$
+  Distinguishes real cryptographic keys ($H > 3.5$) from random English text ($H \approx 2.0$).
+
+================================================================================
+5. NATURAL LANGUAGE PROCESSING (NLP) & CONTEXT EVALUATION
+================================================================================
+
+- The NLP engine inspects extracted text beyond simple token regex:
+  1. Confidentiality Markers: Identifies corporate classification statements.
+  2. Exfiltration Intent Signals: Detects keywords related to exfiltration 
+     (e.g., `bypass`, `uploading to personal`, `secret leak`, `download database`).
+  3. Context Multiplier ($1.0\times$ to $1.35\times$): Reinforces confidence when 
+     sensitive entities appear alongside corporate or financial keywords.
+  4. Language & Structure: Detects whether the content is English, code, or structured.
+
+================================================================================
+6. MACHINE LEARNING (ML) CLASSIFICATION TIERS
+================================================================================
+
+- Model: TF-IDF Vectorizer (ngram range 1-2, sublinear TF) + Multinomial Logistic 
+  Regression Classifier trained on thousands of enterprise DLP samples.
+- Classification Tiers:
+  * PUBLIC (Base Sensitivity: 0.0) -> Normal business/marketing content.
+  * INTERNAL (Base Sensitivity: 30.0) -> Standard internal communications.
+  * CONFIDENTIAL (Base Sensitivity: 65.0) -> Financials, contracts, roadmaps.
+  * RESTRICTED (Base Sensitivity: 85.0) -> PII, Identity data, Aadhaar, PAN, SSN.
+  * HIGHLY_CONFIDENTIAL (Base Sensitivity: 98.0) -> API Keys, Private Keys, Passwords.
+- Promotion Rules:
+  * If `CREDENTIALS` found -> Promoted to `HIGHLY_CONFIDENTIAL`.
+  * If `IDENTITY` or `FINANCIAL` found -> Promoted to `RESTRICTED`.
+  * If `STRICTLY CONFIDENTIAL` marker found -> Promoted to at least `RESTRICTED`.
+
+================================================================================
+7. USER AND ENTITY BEHAVIOR ANALYTICS (UEBA)
+================================================================================
+
+- Baseline Profile: Rolling statistical mean ($\mu$) and standard deviation ($\sigma$) 
+  maintained per employee across hourly event count, file size bytes, and entity counts.
+- Anomaly Types:
+  * VOLUME_SPIKE: Exfiltration of abnormally large file sizes ($Z > 2.5$).
+  * AFTER_HOURS: Activity outside standard corporate hours (before 8 AM, after 7 PM, weekends).
+  * SENSITIVE_BURST: Spike in sensitive entity counts compared to peer baseline.
+  * UNUSUAL_CHANNEL: High-risk egress (USB/External Webmail) for non-authorized roles.
+- Protection Guard: Employees with $< 5$ historical events are marked as 
+  `INSUFFICIENT_BASELINE` to prevent false positive penalties during onboarding.
+
+================================================================================
+8. COMPOSITE RISK SCORING FORMULA & MATHEMATICAL WEIGHTS
+================================================================================
+
+The final Risk Score ($0.0 - 100.0$) is calculated using a multi-factor composite 
+model that incorporates content, channel, destination, temporal, and behavioral factors:
+
+--------------------------------------------------------------------------------
+COMPOSITE RISK FORMULA:
+--------------------------------------------------------------------------------
+
+  $$\text{Raw Risk} = \left[ (\text{Sensitivity} \times 0.40) + (\text{Confidence} \times 100 \times 0.25) + (\text{UEBA Anomaly} \times 100 \times 0.20) \right] \times \text{Channel Multiplier} + \text{Dest Addon} + \text{Temporal Addon}$$
+
+Where:
+  - Sensitivity Score ($0 - 100$): $\text{Base Tier Score} + \min(30.0, \text{Entity Count} \times 5.0)$
+  - Confidence Score ($0.0 - 1.0$): Hybrid confidence from ML, Entity validation, NLP.
+  - UEBA Anomaly ($0.0 - 1.0$): Normalized behavioral anomaly score.
+  - Channel Multiplier:
+      * USB / External Removable Drive: $1.30\times$
+      * Web Browser Upload / Cloud:    $1.20\times$
+      * Corporate Email Attachment:    $1.15\times$
+      * Clipboard Transfer:            $1.10\times$
+      * Local File Operation:          $1.00\times$
+  - Destination Risk Add-on:
+      * External Webmail / Cloud (+10.0 points): Gmail, Google Drive, Dropbox, 
+        OneDrive, WeTransfer, Mega.nz, WhatsApp Web.
+      * Internal Network (0.0 points): Corporate intranet or local workstation.
+  - Temporal Risk Add-on:
+      * After-hours (before 8 AM or after 7 PM) or Weekends: $+5.0$ points.
+  - Exfiltration Intent Surcharge:
+      * NLP intent detection trigger: $+25.0$ points.
+
+--------------------------------------------------------------------------------
+MINIMUM RISK FLOORS (SAFETY GUARDS):
+--------------------------------------------------------------------------------
+  - If `HIGHLY_CONFIDENTIAL` or Credentials detected: Risk Floor = 85.0 (CRITICAL)
+  - If `RESTRICTED` or Identity/Financial data detected: Risk Floor = 80.0 (CRITICAL)
+  - If `CONFIDENTIAL` detected: Risk Floor = 60.0 (HIGH)
+  - If `INTERNAL` detected: Risk Floor = 35.0 (MEDIUM)
+
+================================================================================
+9. POLICY GOVERNANCE & ENFORCEMENT MATRIX
+================================================================================
+
+Risk Score Range | Risk Level | Policy Action | SOC Alert Level | Workstation Enforcement
+----------------|------------|---------------|-----------------|------------------------
+80.0 - 100.0    | CRITICAL   | BLOCK         | P1 - CRITICAL   | Transfer aborted, Input cleared, Alert created
+60.0 - 79.9     | HIGH       | BLOCK / WARN  | P2 - HIGH       | Block on USB/Browser; Warning toast on Email
+35.0 - 59.9     | MEDIUM     | WARN          | P3 - MEDIUM     | User warning toast logged in audit stream
+0.0 - 34.9      | LOW        | ALLOW         | P4 - INFO       | Permitted silently, logged in audit stream
+
+Lifecycle States:
+  - `PENDING_ANALYSIS`: Event received, content extraction in progress.
+  - `ANALYZED`: AI inspection complete, policy evaluated.
+  - `ALLOWED`: Clean file transfer authorized.
+  - `WARNED`: Potential sensitive data noted, user warned.
+  - `BLOCKED`: Exfiltration prohibited by corporate policy.
+  - `CONTENT_ANALYSIS_LIMIT_EXCEEDED`: File > 50MB, metadata inspected.
+  - `ANALYSIS_FAILED`: Extraction error, flagged for manual SOC review.
+
+================================================================================
+10. FAST-PATH SHA-256 CONTENT HASH CACHING
+================================================================================
+
+- Cache Key: Strictly `SHA-256(content_bytes)`.
+- Filename Independent: Renaming a file (e.g., `passwords.txt` -> `innocent.txt`) 
+  produces the exact same byte hash and triggers instant cache hit.
+- Sub-millisecond Execution: Avoids redundant OCR, NLP, and ML parsing for identical 
+  files transferred repeatedly across the fleet.
+- Invalidation: Any modification to the file content alters the SHA-256 hash and 
+  forces full slow-path re-analysis.
+
+================================================================================
+11. DATA MINIMIZATION & PRIVACY PROTOCOLS
+================================================================================
+
+- No Full Document Storage: SentinelDLP never stores entire file contents or raw 
+  images in the central database.
+- Masked Samples Only: Sensitive values are masked for SOC analyst context 
+  (e.g., `XXXX-XXXX-1098` for Aadhaar, `4532-****-****-9010` for Credit Cards, 
+  `AKIA...MPLE` for AWS keys, `j***e@domain.com` for emails).
+- Automatic Tempfile Cleanup: In-memory byte streams and temporary extraction 
+  files are deleted immediately using `try...finally: tmp_path.unlink()`.
+- Zero Password Logging: Passwords, API tokens, and private keys are redacted 
+  as `********[REDACTED_SECRET]********` before entering logging subsystems.
+================================================================================
