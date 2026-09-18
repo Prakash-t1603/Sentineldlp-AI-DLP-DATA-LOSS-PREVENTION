@@ -265,6 +265,7 @@ class AlertResponse(AlertBase):
     id: int
     created_at: datetime
     employee_username: Optional[str] = None
+    employee_name: Optional[str] = None
     filename: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
@@ -406,8 +407,9 @@ class EmployeeDetailResponse(BaseModel):
 
 class DLPEventBase(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    employee_id: Optional[str] = "EMP-LOCAL"
-    device_id: Optional[str] = "WORKSTATION"
+    event_id: Optional[str] = None
+    employee_id: Optional[str] = None
+    device_id: Optional[str] = None
     channel: str = "USB"
     application: Optional[str] = "Workstation App"
     destination: Optional[str] = None
@@ -486,8 +488,8 @@ class DLPGenericScanRequest(BaseModel):
     file_size: int = 0
     extracted_text: Optional[str] = ""
     file_content_base64: Optional[str] = None
-    employee_id: Optional[str] = "EMP-001"
-    device_id: Optional[str] = "WORKSTATION"
+    employee_id: Optional[str] = None
+    device_id: Optional[str] = None
 
 class DLPGenericScanResponse(BaseModel):
     event_id: str

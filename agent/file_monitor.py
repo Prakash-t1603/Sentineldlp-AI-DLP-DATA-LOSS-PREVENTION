@@ -129,25 +129,37 @@ class DLPFileEventHandler(FileSystemEventHandler):
             # Dispatch file to Central Server for OCR, NLP & Policy Evaluation
             scan_res = self.agent.scan_file(filepath=filepath_obj, activity_type=activity_type, destination=destination)
 
-            # Check if exfiltration channel correlation applies
-            if is_cloud_folder:
-                self.agent.send_alert(
-                    alert_type="EXFILTRATION_CLOUD_SYNC",
-                    description=f"File activity '{filepath_obj.name}' in Cloud Sync Folder '{filepath_obj.parent}'.",
-                    severity="HIGH",
-                    risk_score=70.0,
-                    source="FILE_MONITOR"
-                )
-            elif channel_info:
-                category = channel_info["category"]
-                channel_name = channel_info["channel_name"]
-                self.agent.send_alert(
-                    alert_type=f"EXFILTRATION_{category}",
-                    description=f"File '{filepath_obj.name}' accessed while {channel_name} was active ('{win_title}' / {proc_name}).",
-                    severity="HIGH",
-                    risk_score=75.0,
-                    source="FILE_MONITOR"
-                )
+            # Check if exfiltration channel correlation applies and sensitive data is detected
+            sensitive_detected = False
+            classification = "PUBLIC"
+            sensitivity_score = 0.0
+            if isinstance(scan_res, dict):
+                classification = scan_res.get("classification", "PUBLIC")
+                sensitivity_score = float(scan_res.get("sensitivity_score", 0.0))
+                sensitive_detected = sensitivity_score >= 30.0 or classification in ["CONFIDENTIAL", "HIGHLY_CONFIDENTIAL"] or scan_res.get("sensitive_data_detected", False)
+
+            emp_name = getattr(self.agent, "full_name", None) or getattr(self.agent, "username", "Employee")
+            emp_id = getattr(self.agent, "employee_id", "EMP-UNKNOWN")
+
+            if sensitive_detected:
+                if is_cloud_folder:
+                    self.agent.send_alert(
+                        alert_type="EXFILTRATION_CLOUD_SYNC",
+                        description=f"Sensitive file '{filepath_obj.name}' ({classification}, Sensitivity: {sensitivity_score}/100) copied to Cloud Sync Folder '{filepath_obj.parent}' by Employee '{emp_name}' ({emp_id}).",
+                        severity="HIGH",
+                        risk_score=max(70.0, sensitivity_score),
+                        source="FILE_MONITOR"
+                    )
+                elif channel_info:
+                    category = channel_info["category"]
+                    channel_name = channel_info["channel_name"]
+                    self.agent.send_alert(
+                        alert_type=f"EXFILTRATION_{category}",
+                        description=f"Sensitive file '{filepath_obj.name}' ({classification}, Sensitivity: {sensitivity_score}/100) accessed by Employee '{emp_name}' ({emp_id}) while {channel_name} was active ('{win_title}' / {proc_name}).",
+                        severity="HIGH",
+                        risk_score=max(75.0, sensitivity_score),
+                        source="FILE_MONITOR"
+                    )
 
             # Record telemetry
             self.agent.send_activity_log(

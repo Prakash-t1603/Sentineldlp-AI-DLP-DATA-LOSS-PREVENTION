@@ -59,7 +59,7 @@ def run_tests():
 def seed_demo_data():
     """Seed baseline employees and devices with clean zero risk scores (no fake alerts)."""
     from backend.database import SessionLocal, Base, engine
-    from backend.models import Employee, FileRecord, Alert, Incident, ActivityLog, DLPEvent
+    from backend.models import Employee, Device, FileRecord, Alert, Incident, ActivityLog, DLPEvent
     from backend.main import init_database
 
     init_database()
@@ -69,19 +69,25 @@ def seed_demo_data():
     try:
         # 1. Create Baseline Employees (Risk 0.0)
         employees_data = [
-            ("EMP-DEV-01", "dev_alex", "WORKSTATION-ALEX", "192.168.1.101", "Windows 11", 0.0),
-            ("EMP-FIN-02", "sarah_finance", "FIN-LAPTOP-02", "192.168.1.102", "Windows 10", 0.0),
-            ("EMP-HR-03", "mark_hr", "HR-STATION-03", "192.168.1.103", "macOS Sonoma", 0.0),
-            ("EMP-OPS-04", "elena_devops", "SRV-ADMIN-04", "192.168.1.104", "Ubuntu Linux 24.04", 0.0),
-            ("EMP-MKT-05", "david_marketing", "MKT-LAPTOP-05", "192.168.1.105", "Windows 11", 0.0),
+            ("EMP-001", "prakash", "Prakash T", "prakash@sentineldlp.io", "EMP-PC-TEST01", "172.24.143.236", "Linux", 0.0, "Engineering", "Security Lead"),
+            ("EMP-002", "dhya", "Dhya P", "dhya@sentineldlp.io", "EMP-PC-WIN", "192.168.1.150", "Windows 11", 0.0, "Finance", "Financial Analyst"),
+            ("EMP-DEV-01", "dev_alex", "Alex Rivera", "alex@sentineldlp.io", "WORKSTATION-ALEX", "192.168.1.101", "Windows 11", 0.0, "Engineering", "Software Engineer"),
+            ("EMP-FIN-02", "sarah_finance", "Sarah Jenkins", "sarah@sentineldlp.io", "FIN-LAPTOP-02", "192.168.1.102", "Windows 10", 0.0, "Finance", "Accountant"),
+            ("EMP-HR-03", "mark_hr", "Mark Vance", "mark@sentineldlp.io", "HR-STATION-03", "192.168.1.103", "macOS Sonoma", 0.0, "HR", "HR Generalist"),
+            ("EMP-OPS-04", "elena_devops", "Elena Rostova", "elena@sentineldlp.io", "SRV-ADMIN-04", "192.168.1.104", "Ubuntu Linux 24.04", 0.0, "Operations", "DevOps Engineer"),
+            ("EMP-MKT-05", "david_marketing", "David Kim", "david@sentineldlp.io", "MKT-LAPTOP-05", "192.168.1.105", "Windows 11", 0.0, "Marketing", "Marketing Specialist"),
         ]
 
-        for emp_id, uname, host, ip, os_name, risk in employees_data:
+        for emp_id, uname, fname, email, host, ip, os_name, risk, dept, desig in employees_data:
             existing = db.query(Employee).filter(Employee.employee_id == emp_id).first()
             if not existing:
                 emp = Employee(
                     employee_id=emp_id,
                     username=uname,
+                    full_name=fname,
+                    email=email,
+                    department=dept,
+                    designation=desig,
                     hostname=host,
                     ip_address=ip,
                     operating_system=os_name,
@@ -89,6 +95,43 @@ def seed_demo_data():
                     risk_score=risk
                 )
                 db.add(emp)
+            else:
+                existing.full_name = fname
+                existing.email = email
+                existing.department = dept
+                existing.designation = desig
+                existing.hostname = host
+                existing.operating_system = os_name
+        db.commit()
+
+        # 2. Seed Endpoint Devices
+        devices_data = [
+            ("EMP-PC-TEST01", "EMP-PC-TEST01", "EMP-001", "prakash", "Linux", "172.24.143.236", "dev-tok-emp-pc-test01"),
+            ("EMP-PC-WIN", "EMP-PC-WIN", "EMP-002", "dhya", "Windows 11", "192.168.1.150", "dev-tok-emp-pc-win"),
+        ]
+
+        for dev_id, host, emp_id, uname, os_name, ip, tok in devices_data:
+            dev = db.query(Device).filter(Device.device_id == dev_id).first()
+            if not dev:
+                dev = Device(
+                    device_id=dev_id,
+                    hostname=host,
+                    employee_id=emp_id,
+                    username=uname,
+                    operating_system=os_name,
+                    ip_address=ip,
+                    device_token=tok,
+                    status="ONLINE",
+                    monitoring_enabled=True,
+                    monitoring_status="ACTIVE",
+                    is_active=True
+                )
+                db.add(dev)
+            else:
+                dev.employee_id = emp_id
+                dev.hostname = host
+                dev.operating_system = os_name
+                dev.username = uname
         db.commit()
 
         # Clear any preexisting alerts/incidents to guarantee clean state
@@ -97,7 +140,7 @@ def seed_demo_data():
         db.query(DLPEvent).delete()
         db.commit()
 
-        print("[+] Baseline employee directory seeded with 0.0 risk and 0 alerts.\n")
+        print("[+] Baseline employee directory and devices seeded with 0.0 risk and 0 alerts.\n")
     except Exception as e:
         db.rollback()
         print(f"[-] Error seeding data: {e}")

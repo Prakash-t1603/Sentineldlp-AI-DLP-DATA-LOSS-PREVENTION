@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.orm import Session
 
-from backend.models import DLPEvent, Employee, FileRecord
+from backend.models import DLPEvent, Employee, FileRecord, Device
 from backend.services.classifier_service import classifier_service
 from backend.services.file_analysis_service import file_analysis_service
 from backend.services.risk_service import risk_service
@@ -52,18 +52,29 @@ class EmailDLPService:
         Inspect outgoing authorized email and attachments for sensitive data exfiltration.
         Unified processing: Centralized Scanner -> Risk Engine -> Policy Engine -> DLP Event Store -> Alerts.
         """
-        emp_id = employee_id or sender.split("@")[0]
-        # Resolve master employee if exists in database
-        emp = db.query(Employee).filter(Employee.employee_id == emp_id).first()
-        if not emp:
+        # Resolve authoritative employee
+        emp_id = None
+        if device_id:
+            dev = db.query(Device).filter(Device.device_id == device_id).first()
+            if dev and dev.employee_id:
+                emp_id = dev.employee_id
+
+        if not emp_id and employee_id:
+            emp = db.query(Employee).filter(Employee.employee_id == employee_id).first()
+            if emp:
+                emp_id = emp.employee_id
+            else:
+                emp_id = employee_id
+
+        if not emp_id and sender:
             emp = db.query(Employee).filter(Employee.email == sender).first()
             if emp:
                 emp_id = emp.employee_id
             else:
-                # Use first active employee or keep emp_id as identifier without creating ghost record
-                first_emp = db.query(Employee).filter(Employee.active == True).first()
-                if first_emp:
-                    emp_id = first_emp.employee_id
+                emp_id = sender.split("@")[0]
+
+        if not emp_id:
+            emp_id = "UNKNOWN"
 
         # 1. Determine destination boundary
         is_external = self.is_external_email(recipient)
@@ -206,8 +217,10 @@ class EmailDLPService:
         alert_id = None
         alert_created = False
         if action == "BLOCK" or risk_score >= 60.0 or policy_decision.get("create_alert", False):
+            emp_rec = db.query(Employee).filter(Employee.employee_id == emp_id).first()
+            emp_name = (emp_rec.full_name or emp_rec.username) if emp_rec else emp_id
             alert_desc = (
-                f"🚨 EMAIL DLP INCIDENT [{action}]: Outgoing email to external recipient '{recipient}' "
+                f"🚨 EMAIL DLP INCIDENT [{action}] by Employee '{emp_name}' ({emp_id}): Outgoing email from '{sender}' to external recipient '{recipient}' "
                 f"contained sensitive attachment '{attachment_name}' ({classification}, Sensitivity: {sensitivity_score}/100). "
                 f"Detected: [{entity_summary}]. Risk: {risk_score} ({risk_level})."
             )

@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 import requests
 
-from agent.config import SERVER_URL, API_BASE_URL, AGENT_SECRET, EMPLOYEE_ID, HOSTNAME
+from agent.config import (
+    SERVER_URL, API_BASE_URL, AGENT_SECRET, HOSTNAME,
+    get_configured_employee_id, _is_generated_employee_id
+)
 from agent.logger import get_agent_logger as get_logger
 
 logger = get_logger("SentinelDLP.Agent.EmailMonitor")
@@ -20,20 +23,35 @@ class EmailMonitor:
     """
     def __init__(self, agent_instance=None):
         self.agent = agent_instance
-        self.employee_id = getattr(agent_instance, "employee_id", EMPLOYEE_ID)
         self.hostname = getattr(agent_instance, "hostname", HOSTNAME)
         self.server_url = getattr(agent_instance, "server_url", SERVER_URL).rstrip("/")
         self.agent_secret = getattr(agent_instance, "agent_secret", AGENT_SECRET)
         self.is_running = False
 
+    @property
+    def employee_id(self) -> str:
+        if self.agent and getattr(self.agent, "employee_id", None):
+            return self.agent.employee_id
+        configured = get_configured_employee_id()
+        if configured and not _is_generated_employee_id(configured):
+            return configured
+        return ""
+
+    @property
+    def device_id(self) -> str:
+        if self.agent and getattr(self.agent, "device_id", None):
+            return self.agent.device_id
+        return f"EMP-PC-{HOSTNAME.upper()[:6]}"
+
     def _get_headers(self) -> Dict[str, str]:
-        headers = {
-            "Content-Type": "application/json",
-            "X-Agent-Secret": self.agent_secret
-        }
         if self.agent and getattr(self.agent, "api_client", None):
             return self.agent.api_client._get_headers()
-        return headers
+        return {
+            "Content-Type": "application/json",
+            "X-Agent-Secret": self.agent_secret,
+            "X-Device-Id": self.device_id,
+            "X-Employee-Id": self.employee_id
+        }
 
     def inspect_outgoing_email(
         self,
@@ -70,7 +88,7 @@ class EmailMonitor:
             "extracted_text": file_content or "",
             "file_content_base64": b64_content,
             "employee_id": self.employee_id,
-            "device_id": self.hostname
+            "device_id": self.device_id
         }
         try:
             resp = requests.post(url, json=payload, headers=self._get_headers(), timeout=10)

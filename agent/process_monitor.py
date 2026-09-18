@@ -44,13 +44,15 @@ class ProcessMonitor:
                     if pname_lower in WATCHLIST_PROCESSES and pid not in self._alerted_pids:
                         category, severity, risk_score = WATCHLIST_PROCESSES[pname_lower]
                         self._alerted_pids.add(pid)
+                        emp_name = getattr(self.agent, "full_name", None) or getattr(self.agent, "username", "Employee")
+                        emp_id = getattr(self.agent, "employee_id", "EMP-UNKNOWN")
 
-                        logger.warning(f"HIGH-RISK PROCESS DETECTED: {pname} (PID: {pid}) - {category}")
+                        logger.warning(f"HIGH-RISK PROCESS DETECTED: {pname} (PID: {pid}) - {category} by {emp_name} ({emp_id})")
                         self.agent.send_alert(
                             alert_type=f"SUSPICIOUS_PROCESS_{category}",
                             description=(
                                 f"High-risk transfer/network process '{pname}' (PID: {pid}) "
-                                f"detected on endpoint. Risk Category: {category}."
+                                f"detected on endpoint for Employee '{emp_name}' ({emp_id}). Risk Category: {category}."
                             ),
                             severity=severity,
                             risk_score=risk_score,

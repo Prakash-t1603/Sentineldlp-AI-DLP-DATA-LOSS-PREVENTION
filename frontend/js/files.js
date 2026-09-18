@@ -3,7 +3,7 @@ let allFiles = [];
 let currentFilteredFiles = [];
 let selectedFileIds = new Set();
 
-function escapeHTML(str) {
+window.escapeHTML = window.escapeHTML || function(str) {
   if (str === null || str === undefined) return "";
   return String(str)
     .replace(/&/g, "&amp;")
@@ -11,7 +11,7 @@ function escapeHTML(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
-}
+};
 
 document.addEventListener("DOMContentLoaded", () => {
   loadFiles();

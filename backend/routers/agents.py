@@ -69,7 +69,7 @@ def agent_status_event(
     Records audit entry in activity logs without generating false security alerts.
     """
     device = db.query(Device).filter(Device.device_id == req.device_id).first()
-    emp_id = req.employee_id or (device.employee_id if device else "EMP-UNKNOWN")
+    emp_id = (device.employee_id if device and device.employee_id else req.employee_id) or "UNKNOWN"
     now = datetime.now(timezone.utc)
 
     if device:

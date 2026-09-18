@@ -170,14 +170,16 @@ class USBFileTransferHandler(FileSystemEventHandler):
                 if file_hash:
                     self._recently_alerted[file_hash] = time.time()
                 target_desc = f"Image identified as '{doc_type}' ('{filepath.name}')" if doc_type else f"Sensitive file '{filepath.name}'"
+                emp_name = getattr(self.agent, "full_name", None) or getattr(self.agent, "username", "Employee")
+                emp_id = getattr(self.agent, "employee_id", "EMP-UNKNOWN")
 
                 alert_desc = (
                     f"🚨 REAL-TIME USB EXFILTRATION DETECTED: {target_desc} "
-                    f"({classification}, Sensitivity: {sensitivity_score}/100) transferred to "
-                    f"Removable Storage '{self.drive_path}'. "
+                    f"({classification}, Sensitivity: {sensitivity_score}/100) copied to "
+                    f"Removable Storage '{self.drive_path}' by Employee '{emp_name}' ({emp_id}). "
                     f"Detected: [{entity_summary}]."
                 )
-                logger.warning(f"CRITICAL USB EXFILTRATION: {target_desc} -> {self.drive_path}")
+                logger.warning(f"CRITICAL USB EXFILTRATION: {target_desc} -> {self.drive_path} by {emp_name} ({emp_id})")
 
                 if hasattr(self.agent, "send_alert"):
                     self.agent.send_alert(
@@ -422,14 +424,13 @@ class USBMonitor:
                 inserted = current_set - self._known_drives
                 for drive in inserted:
                     dtype = current_drives.get(drive, "REMOVABLE")
-                    logger.warning(f"🔌 REMOVABLE STORAGE DETECTED: {drive} ({dtype})")
-                    self.agent.send_alert(
-                        alert_type="USB_DEVICE_ATTACHED",
-                        description=f"Removable media device attached: '{drive}' ({dtype}). Live real-time DLP file interception engaged.",
-                        severity="MEDIUM",
-                        risk_score=35.0,
-                        source="USB_MONITOR"
-                    )
+                    logger.info(f"🔌 Removable storage device detected: {drive} ({dtype}). Live real-time DLP file interception engaged.")
+                    if hasattr(self.agent, "send_activity_log"):
+                        self.agent.send_activity_log(
+                            activity_type="USB_DEVICE_ATTACHED",
+                            destination=drive,
+                            risk_score=0.0
+                        )
                     # Attach live watcher
                     self._attach_usb_watcher(drive)
 

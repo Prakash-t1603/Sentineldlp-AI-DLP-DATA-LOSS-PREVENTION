@@ -1,3 +1,4 @@
+import os
 import json
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -68,11 +69,11 @@ class ReusableHTTPServer(HTTPServer):
 
 class BrowserMonitor:
     """
-    Endpoint Browser Monitor service listening for browser extension telemetry on localhost (ports 8765-8768).
+    Endpoint Browser Monitor service listening for browser extension telemetry on localhost (127.0.0.1:8765-8768).
     """
-    def __init__(self, agent_instance, host: str = "0.0.0.0", port: int = 8765):
+    def __init__(self, agent_instance, host: Optional[str] = None, port: int = 8765):
         self.agent = agent_instance
-        self.host = host
+        self.host = host or os.environ.get("BROWSER_RECEIVER_HOST", "127.0.0.1")
         self.port = port
         self.httpd: Optional[HTTPServer] = None
         self._thread: Optional[threading.Thread] = None
@@ -91,8 +92,7 @@ class BrowserMonitor:
                 self.is_running = True
                 self._thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
                 self._thread.start()
-                display_ip = getattr(self.agent, "ip_address", None) or "172.24.143.236"
-                logger.info(f"Browser Extension receiver active on http://{display_ip}:{self.port} (network interface: 0.0.0.0)")
+                logger.info(f"Browser Extension receiver active on http://{self.host}:{self.port} (network interface: {self.host})")
                 return
             except OSError:
                 continue

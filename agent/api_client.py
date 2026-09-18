@@ -5,7 +5,10 @@ from agent.config import (
     API_BASE_URL, SERVER_URL, AGENT_SECRET, HOSTNAME,
     OS_NAME, LOCAL_IP, EMPLOYEE_ID, USERNAME, EMPLOYEE_NAME,
     EMPLOYEE_EMAIL, EMPLOYEE_DEPT, EMPLOYEE_DESIG, EMPLOYEE_PHONE,
-    load_device_credentials, save_device_credentials
+    load_device_credentials, save_device_credentials,
+    get_configured_employee_id, _is_generated_employee_id,
+    normalize_employee_id, validate_employee_id, normalize_server_url,
+    get_or_generate_stable_device_id
 )
 from agent.logger import get_agent_logger
 from agent.event_queue import event_queue
@@ -17,22 +20,37 @@ class AgentAPIClient:
     HTTP API client managing communication between the Endpoint Agent and the Central DLP Server.
     Supports auto-registration, device credential persistence, heartbeats, status events, and offline queue fallback.
     """
-    def __init__(self, server_url: Optional[str] = None):
-        self.server_url = (server_url or SERVER_URL).rstrip("/")
+    def __init__(
+        self,
+        server_url: Optional[str] = None,
+        employee_id: Optional[str] = None,
+        device_id: Optional[str] = None
+    ):
+        self.server_url = normalize_server_url(server_url or SERVER_URL)
         self.api_base = f"{self.server_url}/api/v1"
         self.agent_secret = AGENT_SECRET
 
-        # Load or initialize device credentials
+        # Load or initialize device credentials with stable unique device identity
         creds = load_device_credentials()
-        self.device_id = creds.get("device_id") or f"EMP-PC-{HOSTNAME.upper()[:6]}"
+        self.device_id = get_or_generate_stable_device_id(device_id)
         self.device_token = creds.get("device_token") or ""
+        
+        # Authoritative employee_id from parameter > valid saved credential > configured EMPLOYEE_ID
+        raw_emp = employee_id or creds.get("employee_id") or get_configured_employee_id() or EMPLOYEE_ID or ""
+        norm_emp = normalize_employee_id(raw_emp) or ""
+        if norm_emp and validate_employee_id(norm_emp) and not _is_generated_employee_id(norm_emp):
+            self.employee_id = norm_emp
+        else:
+            self.employee_id = normalize_employee_id(employee_id) or ""
+
         self.is_registered = bool(self.device_token)
 
     def _get_headers(self) -> Dict[str, str]:
         headers = {
             "Content-Type": "application/json",
             "X-Agent-Secret": self.agent_secret,
-            "X-Device-Id": self.device_id
+            "X-Device-Id": self.device_id,
+            "X-Employee-Id": self.employee_id
         }
         if self.device_token:
             headers["X-Device-Token"] = self.device_token
@@ -49,6 +67,12 @@ class AgentAPIClient:
         phone_number: Optional[str] = None
     ) -> bool:
         """Register the endpoint device with the Central DLP Server."""
+        emp_id = (employee_id or self.employee_id).strip()
+        if not emp_id:
+            logger.error("❌ CRITICAL: Cannot register endpoint device without an assigned Employee ID!")
+            return False
+
+        self.employee_id = emp_id
         url = f"{self.api_base}/agents/register"
         payload = {
             "hostname": HOSTNAME,
@@ -61,22 +85,24 @@ class AgentAPIClient:
             "designation": designation or EMPLOYEE_DESIG,
             "phone_number": phone_number or EMPLOYEE_PHONE,
             "agent_version": "2.1.0",
-            "employee_id": employee_id or EMPLOYEE_ID,
+            "employee_id": emp_id,
             "preferred_device_id": self.device_id
         }
+        assert payload["employee_id"] == self.employee_id, "Registration employee_id mismatch"
+
         try:
-            logger.info(f"Registering endpoint device with Central Server at {url}...")
+            logger.info(f"Registering endpoint device with Central Server at {url} (Employee: {emp_id})...")
             resp = requests.post(url, json=payload, headers=self._get_headers(), timeout=6)
             if resp.status_code in [200, 201]:
                 data = resp.json()
                 self.device_id = data.get("device_id", self.device_id)
                 self.device_token = data.get("device_token", "")
                 self.is_registered = True
-                save_device_credentials(self.device_id, self.device_token)
+                save_device_credentials(self.device_id, self.device_token, self.employee_id)
                 logger.info(f"Endpoint registered successfully! Assigned Device ID: {self.device_id}")
                 return True
             elif resp.status_code in [404, 409] and "EMPLOYEE_NOT_REGISTERED" in resp.text:
-                logger.error(f"❌ Employee ID '{payload.get('employee_id')}' not registered. Register the employee before installing/activating the endpoint. Contact administrator.")
+                logger.error(f"❌ Employee ID '{emp_id}' not registered in Central SOC directory. Register employee before activating endpoint.")
                 return False
             else:
                 logger.warning(f"Registration rejected with status {resp.status_code}: {resp.text}")
@@ -98,10 +124,16 @@ class AgentAPIClient:
         metrics: Optional[Dict[str, Any]] = None
     ) -> bool:
         """Send periodic heartbeat ping to the Central Server with full telemetry."""
+        emp_id = (employee_id or self.employee_id).strip()
+        if not emp_id:
+            logger.warning("Heartbeat skipped: No Employee ID configured.")
+            return False
+
+        self.employee_id = emp_id
         url = f"{self.api_base}/agents/heartbeat"
         payload = {
             "device_id": self.device_id,
-            "employee_id": employee_id or EMPLOYEE_ID,
+            "employee_id": emp_id,
             "hostname": HOSTNAME,
             "username": USERNAME,
             "full_name": full_name or EMPLOYEE_NAME,
@@ -124,6 +156,8 @@ class AgentAPIClient:
             },
             "metrics": metrics or {}
         }
+        assert payload["employee_id"] == self.employee_id, "Heartbeat employee_id mismatch"
+
         try:
             resp = requests.post(url, json=payload, headers=self._get_headers(), timeout=5)
             if resp.status_code == 200:
@@ -144,13 +178,22 @@ class AgentAPIClient:
         """
         Send operational lifecycle event (AGENT_STARTED, MONITORING_STARTED, AGENT_STOPPED).
         """
+        emp_id = (employee_id or self.employee_id).strip()
+        if not emp_id:
+            logger.warning(f"Status event '{event}' skipped: No Employee ID configured.")
+            return False
+
+        self.employee_id = emp_id
         url = f"{self.api_base}/agents/status"
         payload = {
             "device_id": self.device_id,
-            "employee_id": employee_id or EMPLOYEE_ID,
+            "employee_id": self.employee_id,
             "event": event,
             "details": details or f"Host: {HOSTNAME} ({LOCAL_IP})"
         }
+        assert payload["employee_id"] == self.employee_id, "Status event employee_id mismatch"
+        assert payload["device_id"] == self.device_id, "Status event device_id mismatch"
+
         try:
             resp = requests.post(url, json=payload, headers=self._get_headers(), timeout=5)
             return resp.status_code == 200
@@ -163,10 +206,23 @@ class AgentAPIClient:
         Send a DLP security event (USB, Browser, Email, File) to the Central Server.
         Automatically queues event locally if the Central Server is unreachable.
         """
-        # Ensure device metadata is attached
-        event_payload.setdefault("device_id", self.device_id)
-        event_payload.setdefault("employee_id", EMPLOYEE_ID)
+        payload_emp = event_payload.get("employee_id")
+        if payload_emp and payload_emp != self.employee_id:
+            logger.error(f"❌ Rejected DLP event dispatch with inconsistent employee_id '{payload_emp}' (Expected '{self.employee_id}')")
+            raise AssertionError(f"DLP event employee_id mismatch: {payload_emp} != {self.employee_id}")
+
+        payload_dev = event_payload.get("device_id")
+        if payload_dev and payload_dev != self.device_id:
+            logger.error(f"❌ Rejected DLP event dispatch with inconsistent device_id '{payload_dev}' (Expected '{self.device_id}')")
+            raise AssertionError(f"DLP event device_id mismatch: {payload_dev} != {self.device_id}")
+
+        # Ensure authoritative device and employee metadata is attached
+        event_payload["device_id"] = self.device_id
+        event_payload["employee_id"] = self.employee_id
         event_payload.setdefault("source", "endpoint_agent")
+
+        ev_id = event_payload.get("event_id", "new")
+        logger.info(f"Creating event {ev_id} for employee {self.employee_id}, device {self.device_id}")
 
         url = f"{self.api_base}/dlp/events"
         try:
@@ -187,6 +243,7 @@ class AgentAPIClient:
     def flush_offline_queue(self, max_items: int = 50) -> int:
         """
         Replay buffered offline events to the Central Server once connection is re-established.
+        Preserves original offline event employee_id, device_id, and event_id.
         """
         if event_queue.size() == 0:
             return 0
@@ -199,9 +256,23 @@ class AgentAPIClient:
         synced_ids = []
 
         for row_id, event_type, payload in batch:
+            # Preserve original queued employee_id and device_id if present; fallback to authoritative instance state
+            payload["employee_id"] = payload.get("employee_id") or self.employee_id
+            payload["device_id"] = payload.get("device_id") or self.device_id
+
+            headers = {
+                "Content-Type": "application/json",
+                "X-Agent-Secret": self.agent_secret,
+                "X-Device-Id": payload["device_id"],
+                "X-Employee-Id": payload["employee_id"]
+            }
+            if self.device_token:
+                headers["X-Device-Token"] = self.device_token
+                headers["Authorization"] = f"Bearer {self.device_token}"
+
             url = f"{self.api_base}/dlp/events"
             try:
-                resp = requests.post(url, json=payload, headers=self._get_headers(), timeout=5)
+                resp = requests.post(url, json=payload, headers=headers, timeout=5)
                 if resp.status_code in [200, 201]:
                     synced_ids.append(row_id)
                 else:

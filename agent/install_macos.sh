@@ -5,8 +5,17 @@
 set -e
 
 SERVER_URL="${1:-http://127.0.0.1:8000}"
-EMPLOYEE_ID="${2:-EMP-$(scutil --get ComputerName 2>/dev/null || hostname | tr '[:lower:]' '[:upper:]')}"
+EMPLOYEE_ID="${2:-}"
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ -z "${EMPLOYEE_ID}" ]; then
+    echo "================================================================="
+    echo " ❌ ERROR: Employee ID is required!"
+    echo " Usage: ./install_macos.sh <SERVER_URL> <EMPLOYEE_ID>"
+    echo " Example: ./install_macos.sh http://172.24.143.236:8000 EMP-WIN-01"
+    echo "================================================================="
+    exit 1
+fi
 
 echo "================================================================="
 echo "   SentinelDLP Endpoint Protection Agent - macOS Installer       "
@@ -35,6 +44,8 @@ EMPLOYEE_ID="${EMPLOYEE_ID}"
 AGENT_SECRET="sentinel_agent_telemetry_secure_token_key_9981"
 PYTHONPATH="${INSTALL_DIR}"
 EOF
+
+echo "${EMPLOYEE_ID}" > .employee_id 2>/dev/null || true
 
 # 3. Configure launchd agent for automatic startup
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"

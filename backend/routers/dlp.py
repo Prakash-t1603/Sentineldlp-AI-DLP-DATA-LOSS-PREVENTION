@@ -30,6 +30,58 @@ router = APIRouter(prefix="/dlp", tags=["Unified Multi-Channel DLP"])
 
 # ==================== Unified DLP Ingestion & Scanning ====================
 
+def _resolve_authoritative_identity(
+    db: Session,
+    employee_id: Optional[str] = None,
+    device_id: Optional[str] = None
+) -> Tuple[Employee, Optional[Device], str, str]:
+    """
+    Authoritatively resolve employee and device relationship:
+    1. If device_id is provided, look up registered Device.
+    2. If Device exists and has an assigned employee_id:
+       - If incoming employee_id differs from Device.employee_id, detect and log mismatch,
+         and authoritatively bind to the registered Device.employee_id.
+       - Master employee is looked up using Device.employee_id.
+    3. If Device is not found or has no employee_id:
+       - Look up employee by employee_id.
+       - If still not found, fail with 404 (NEVER fall back to first employee).
+    """
+    clean_emp = (employee_id or "").strip()
+    clean_dev = (device_id or "").strip()
+
+    device = None
+    target_emp_id = clean_emp
+
+    if clean_dev:
+        device = db.query(Device).filter(Device.device_id == clean_dev).first()
+        if device and device.employee_id:
+            if clean_emp and clean_emp != device.employee_id:
+                logger.warning(
+                    f"⚠️ Mismatch detected: Ingested event claimed employee_id='{clean_emp}', "
+                    f"but authenticated device '{clean_dev}' is registered to employee '{device.employee_id}'. "
+                    f"Authoritatively assigning event to '{device.employee_id}'."
+                )
+            target_emp_id = device.employee_id
+
+    if not target_emp_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "EMPLOYEE_ID_REQUIRED", "message": "Valid Employee ID or registered Device ID is required."}
+        )
+
+    emp = db.query(Employee).filter(Employee.employee_id == target_emp_id).first()
+    if not emp:
+        logger.error(f"❌ Ingestion rejected: Employee '{target_emp_id}' not registered in master directory.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "EMPLOYEE_NOT_FOUND", "message": f"Employee '{target_emp_id}' does not exist in SOC master directory."}
+        )
+
+    effective_dev_id = clean_dev or (device.device_id if device else "WORKSTATION")
+    logger.info(f"Authenticated device {effective_dev_id} resolved to employee {emp.employee_id}")
+
+    return emp, device, emp.employee_id, effective_dev_id
+
 @router.post("/scan", response_model=DLPGenericScanResponse)
 def scan_dlp_file(
     scan_req: DLPGenericScanRequest,
@@ -46,20 +98,13 @@ def scan_dlp_file(
     file_size = scan_req.file_size
     raw_bytes: Optional[bytes] = None
     extracted_text = scan_req.extracted_text or ""
-    emp_id = scan_req.employee_id or "EMP-001"
-    dev_id = scan_req.device_id or "WORKSTATION"
 
-    emp = db.query(Employee).filter(Employee.employee_id == emp_id).first()
-    if not emp and dev_id:
-        dev = db.query(Device).filter(Device.device_id == dev_id).first()
-        if dev and dev.employee_id:
-            emp = db.query(Employee).filter(Employee.employee_id == dev.employee_id).first()
-    if emp:
-        emp_id = emp.employee_id
-    else:
-        first_emp = db.query(Employee).filter(Employee.active == True).first()
-        if first_emp:
-            emp_id = first_emp.employee_id
+    # Authoritatively resolve employee & device identity
+    emp, dev, emp_id, dev_id = _resolve_authoritative_identity(
+        db=db,
+        employee_id=scan_req.employee_id,
+        device_id=scan_req.device_id
+    )
 
     # Decode base64 payload if provided
     if scan_req.file_content_base64:
@@ -117,21 +162,11 @@ def scan_dlp_file(
     elif policy_decision.get("action") == "WARN" and action == "ALLOW":
         action = "WARN"
 
-    # 3. Associate with master employee if exists, or check registered device
-    emp = db.query(Employee).filter(Employee.employee_id == emp_id).first()
-    if not emp and dev_id:
-        dev = db.query(Device).filter(Device.device_id == dev_id).first()
-        if dev and dev.employee_id:
-            emp = db.query(Employee).filter(Employee.employee_id == dev.employee_id).first()
-            if emp:
-                emp_id = emp.employee_id
+    emp.last_seen = datetime.now(timezone.utc)
+    emp.status = "ONLINE"
+    db.commit()
 
-    if emp:
-        emp.last_seen = datetime.now(timezone.utc)
-        emp.status = "ONLINE"
-        db.commit()
-
-    # 4. Construct rich, structured Detection Details string
+    # 3. Construct rich, structured Detection Details string
     ext = Path(file_name).suffix.lower() if file_name else ""
     ocr_tag = f"DETECTED ({int(ai_res.confidence_breakdown.get('ocr_confidence', 0.95)*100)}%)" if ai_res.ocr_used else "NONE"
     nlp_tag = f"DETECTED ({len(detected_entities)} entities)" if detected_entities else "CLEAN"
@@ -173,12 +208,13 @@ def scan_dlp_file(
     db.commit()
     db.refresh(event)
 
-    # 5. Real-Time Alerting for HIGH and CRITICAL events
+    # 4. Real-Time Alerting for HIGH and CRITICAL events (BLOCK, WARN or risk >= 60.0)
     alert_created = False
     alert_id = None
-    if action == "BLOCK" or risk_score >= 60.0 or policy_decision.get("create_alert", False):
+    if action == "BLOCK" or risk_score >= 60.0 or (policy_decision.get("create_alert", False) and action in ["BLOCK", "WARN"]):
+        emp_name = emp.full_name or emp.username or emp_id
         alert_desc = (
-            f"🚨 DLP INCIDENT [{action}] on {channel}: Transfer of '{file_name}' ({classification}, "
+            f"🚨 DLP INCIDENT [{action}] by Employee '{emp_name}' ({emp_id}) on {channel}: Transfer of '{file_name}' ({classification}, "
             f"Sensitivity: {sensitivity_score}/100) via {scan_req.application} to '{destination}'. "
             f"Detected: [{entity_summary}]. Risk: {risk_score} ({risk_level})."
         )
@@ -246,8 +282,8 @@ def handle_browser_event(
     Handle file upload interception events from the Browser DLP extension / web client.
     Supports Google Drive, OneDrive, Dropbox, Gmail Webmail, WhatsApp Web, WeTransfer, etc.
     """
-    emp_id = req.employee_id or req.employee or "employee01"
-    dev_id = req.device_id or req.device or "DESKTOP-001"
+    emp_id = req.employee_id or req.employee
+    dev_id = req.device_id or req.device
     dest = req.domain or req.application
 
     scan_req = DLPGenericScanRequest(
@@ -308,17 +344,11 @@ def record_generic_dlp_event(
     auth_caller: Optional[User] = Depends(get_current_user_or_agent)
 ):
     """Ingest a pre-computed or endpoint-agent generated DLP event with deep content analysis."""
-    emp = db.query(Employee).filter(Employee.employee_id == event_in.employee_id).first()
-    if not emp and event_in.device_id:
-        dev = db.query(Device).filter(Device.device_id == event_in.device_id).first()
-        if dev and dev.employee_id:
-            emp = db.query(Employee).filter(Employee.employee_id == dev.employee_id).first()
-
-    if not emp:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": "EMPLOYEE_NOT_FOUND", "message": f"Employee '{event_in.employee_id}' not found. Cannot record DLP event for unassigned employee."}
-        )
+    emp, dev, emp_id, dev_id = _resolve_authoritative_identity(
+        db=db,
+        employee_id=event_in.employee_id,
+        device_id=event_in.device_id
+    )
 
     emp.last_seen = datetime.now(timezone.utc)
     emp.status = "ONLINE"
@@ -335,8 +365,8 @@ def record_generic_dlp_event(
             file_size=event_in.file_size or 0,
             extracted_text=event_in.extracted_text or "",
             file_content_base64=event_in.file_content_base64,
-            employee_id=emp.employee_id,
-            device_id=event_in.device_id
+            employee_id=emp_id,
+            device_id=dev_id
         )
         scan_res = scan_dlp_file(scan_req=scan_req, db=db, auth_caller=auth_caller)
         # Fetch the created DLPEvent
@@ -345,7 +375,10 @@ def record_generic_dlp_event(
             return event
 
     event_data = event_in.model_dump(exclude={"file_content_base64", "file_path", "extracted_text"})
-    event_data["employee_id"] = emp.employee_id
+    event_data["employee_id"] = emp_id
+    event_data["device_id"] = dev_id
+    if not event_data.get("event_id"):
+        event_data.pop("event_id", None)
     if isinstance(event_data.get("details"), (dict, list)):
         event_data["details"] = json.dumps(event_data["details"])
     event = DLPEvent(**event_data)
@@ -353,13 +386,14 @@ def record_generic_dlp_event(
     db.commit()
     db.refresh(event)
 
-    # If action is BLOCK or risk >= 60, create alert
-    if event.action == "BLOCK" or event.risk_score >= 60.0:
-        alert_desc = f"🚨 DLP Event [{event.action}] on {event.channel}: {event.file_name} -> {event.destination} (Risk: {event.risk_score})"
+    # If action is BLOCK or (risk >= 60 and not ALLOW), create alert
+    if event.action == "BLOCK" or (event.risk_score >= 60.0 and event.action in ["BLOCK", "WARN"]):
+        emp_name = emp.full_name or emp.username or emp_id
+        alert_desc = f"🚨 DLP Event [{event.action}] by Employee '{emp_name}' ({emp_id}) on {event.channel}: {event.file_name} -> {event.destination} (Risk: {event.risk_score})"
         alert_service.process_and_create_alert(
             db=db,
-            employee_id=event.employee_id,
-            device_id=event.device_id,
+            employee_id=emp_id,
+            device_id=dev_id,
             event_id=event.event_id,
             alert_type=f"DLP_{event.channel}_{event.action}",
             description=alert_desc,

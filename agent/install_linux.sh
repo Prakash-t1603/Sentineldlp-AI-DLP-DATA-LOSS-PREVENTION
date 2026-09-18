@@ -8,7 +8,6 @@ INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${INSTALL_DIR}"
 
 CURRENT_USER="${SUDO_USER:-$USER}"
-DEFAULT_HOST_ID="EMP-$(hostname | tr '[:lower:]' '[:upper:]' | cut -c1-8)"
 
 # Command line parameters with defaults
 CLI_SERVER_URL="${1:-}"
@@ -37,10 +36,21 @@ if [ -t 0 ]; then
     # Strip trailing slash
     SERVER_URL="${SERVER_URL%/}"
 
-    # 2. Employee ID
-    DEFAULT_EMP="${CLI_EMPLOYEE_ID:-EMP-001}"
-    read -rp "Employee ID (e.g. EMP-001) [${DEFAULT_EMP}]: " INPUT_EMP
-    EMPLOYEE_ID="${INPUT_EMP:-$DEFAULT_EMP}"
+    # 2. Employee ID (Mandatory)
+    DEFAULT_EMP="${CLI_EMPLOYEE_ID:-}"
+    EMPLOYEE_ID=""
+    while [ -z "${EMPLOYEE_ID}" ]; do
+        if [ -n "${DEFAULT_EMP}" ]; then
+            read -rp "Employee ID (e.g. EMP-WIN-01) [${DEFAULT_EMP}]: " INPUT_EMP
+            EMPLOYEE_ID="${INPUT_EMP:-$DEFAULT_EMP}"
+        else
+            read -rp "Employee ID (e.g. EMP-WIN-01): " INPUT_EMP
+            EMPLOYEE_ID="${INPUT_EMP}"
+        fi
+        if [ -z "${EMPLOYEE_ID}" ]; then
+            echo "❌ An assigned Employee ID is mandatory."
+        fi
+    done
 
     # 3. Employee Full Name
     DEFAULT_NAME="${CLI_NAME:-${CURRENT_USER}}"
@@ -63,9 +73,15 @@ if [ -t 0 ]; then
     EMPLOYEE_DESIG="${INPUT_DESIG:-$DEFAULT_DESIG}"
     echo ""
 else
+    if [ -z "${CLI_EMPLOYEE_ID}" ]; then
+        echo "❌ ERROR: Employee ID is required!" >&2
+        echo "Usage: ./install_linux.sh <SERVER_URL> <EMPLOYEE_ID> [NAME] [EMAIL] [DEPT] [DESIG]" >&2
+        echo "Example: ./install_linux.sh http://172.24.143.236:8000 EMP-WIN-01" >&2
+        exit 1
+    fi
     SERVER_URL="${CLI_SERVER_URL:-http://127.0.0.1:8000}"
     SERVER_URL="${SERVER_URL%/}"
-    EMPLOYEE_ID="${CLI_EMPLOYEE_ID:-EMP-001}"
+    EMPLOYEE_ID="${CLI_EMPLOYEE_ID}"
     EMPLOYEE_NAME="${CLI_NAME:-${CURRENT_USER}}"
     EMPLOYEE_EMAIL="${CLI_EMAIL:-${CURRENT_USER}@company.com}"
     EMPLOYEE_DEPT="${CLI_DEPT:-Engineering}"

@@ -16,6 +16,25 @@ def db_session():
     """Provide a database session for test execution."""
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
+    # Ensure test employee exists
+    for emp_id, uname, email in [
+        ("EMP-001", "prakash", "employee01@company.com"),
+        ("EMP-002", "dhya", "dhya@company.com"),
+    ]:
+        emp = db.query(Employee).filter(Employee.employee_id == emp_id).first()
+        if not emp:
+            emp = Employee(
+                employee_id=emp_id,
+                username=uname,
+                full_name=uname.title(),
+                email=email,
+                status="ONLINE",
+                risk_score=0.0
+            )
+            db.add(emp)
+        else:
+            emp.email = email
+    db.commit()
     policy_service.seed_default_policies(db)
     yield db
     db.close()

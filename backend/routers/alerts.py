@@ -68,6 +68,7 @@ def list_alerts(
         res = AlertResponse.model_validate(a)
         if a.employee:
             res.employee_username = a.employee.username
+            res.employee_name = a.employee.full_name or a.employee.username
         if a.file:
             res.filename = a.file.filename
         results.append(res)
@@ -91,7 +92,13 @@ def create_alert(
         risk_score=alert_in.risk_score,
         severity=alert_in.severity
     )
-    return AlertResponse.model_validate(created)
+    res = AlertResponse.model_validate(created)
+    if created.employee:
+        res.employee_username = created.employee.username
+        res.employee_name = created.employee.full_name or created.employee.username
+    if created.file:
+        res.filename = created.file.filename
+    return res
 
 @router.patch("/{alert_id}", response_model=AlertResponse)
 def update_alert_status(
@@ -111,7 +118,13 @@ def update_alert_status(
     db.commit()
     db.refresh(alert)
     logger.info(f"User {current_user.username} updated Alert #{alert.id} status to {alert.status}")
-    return AlertResponse.model_validate(alert)
+    res = AlertResponse.model_validate(alert)
+    if alert.employee:
+        res.employee_username = alert.employee.username
+        res.employee_name = alert.employee.full_name or alert.employee.username
+    if alert.file:
+        res.filename = alert.file.filename
+    return res
 
 @router.get("/{alert_id}", response_model=AlertResponse)
 def get_alert_detail(
@@ -127,6 +140,7 @@ def get_alert_detail(
     res = AlertResponse.model_validate(alert)
     if alert.employee:
         res.employee_username = alert.employee.username
+        res.employee_name = alert.employee.full_name or alert.employee.username
     if alert.file:
         res.filename = alert.file.filename
     return res

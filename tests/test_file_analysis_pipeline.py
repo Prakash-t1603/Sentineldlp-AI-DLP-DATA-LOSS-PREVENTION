@@ -260,6 +260,32 @@ def test_9_credential_leak_detection(db_session, auth_headers):
 # 10. Browser File Upload Interception Pipeline API
 # ==========================================
 def test_10_browser_upload_interception_api(client, db_session, auth_headers):
+    # Ensure test employee and device are registered
+    from backend.models import Employee, Device
+    emp = db_session.query(Employee).filter(Employee.employee_id == "EMP-BROWSER-TEST").first()
+    if not emp:
+        emp = Employee(
+            employee_id="EMP-BROWSER-TEST",
+            username="browser_tester",
+            full_name="Browser Tester",
+            status="ONLINE",
+            risk_score=0.0
+        )
+        db_session.add(emp)
+        db_session.commit()
+
+    dev = db_session.query(Device).filter(Device.device_id == "DESKTOP-TEST").first()
+    if not dev:
+        dev = Device(
+            device_id="DESKTOP-TEST",
+            hostname="DESKTOP-TEST",
+            employee_id="EMP-BROWSER-TEST",
+            device_token="dev-tok-desktop-test",
+            status="ONLINE"
+        )
+        db_session.add(dev)
+        db_session.commit()
+
     img_path = TEST_DATA_DIR / "image_sensitive.png"
     with open(img_path, "rb") as f:
         b64_content = base64.b64encode(f.read()).decode("utf-8")

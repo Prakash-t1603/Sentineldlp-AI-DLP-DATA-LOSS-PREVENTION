@@ -32,7 +32,9 @@ function applyFilters() {
     if (sev && a.severity !== sev) return false;
     if (status && a.status !== status) return false;
     if (search) {
-      const matchEmp = (a.employee_id || "").toLowerCase().includes(search);
+      const matchEmp = (a.employee_id || "").toLowerCase().includes(search) ||
+                       (a.employee_name || "").toLowerCase().includes(search) ||
+                       (a.employee_username || "").toLowerCase().includes(search);
       const matchType = (a.alert_type || "").toLowerCase().includes(search);
       const matchDesc = (a.description || "").toLowerCase().includes(search);
       if (!matchEmp && !matchType && !matchDesc) return false;
@@ -62,8 +64,8 @@ function renderAlerts(alerts) {
         </td>
         <td class="text-muted small">${formatDate(a.created_at)}</td>
         <td>
-          <span class="text-info fw-bold font-monospace">${a.employee_id}</span>
-          <div class="small text-muted">${a.employee_username || ''}</div>
+          <div class="fw-bold text-white">${escapeHTML(a.employee_name || a.employee_username || 'Employee')}</div>
+          <div class="small text-info font-monospace">${escapeHTML(a.employee_id)}</div>
         </td>
         <td>
           <div class="d-flex flex-column gap-1">
@@ -100,40 +102,42 @@ window.toggleSelectAlert = function(id, isChecked) {
   } else {
     selectedAlertIds.delete(id);
   }
-  updateAlertSelectionUI();
+  updateAlertSelectionUI(allAlerts);
 };
 
-window.toggleSelectAllAlerts = function(isChecked) {
-  if (isChecked) {
-    allAlerts.forEach(a => selectedAlertIds.add(a.id));
-  } else {
-    selectedAlertIds.clear();
-  }
-  applyFilters();
-};
-
-function updateAlertSelectionUI(currentAlertsList) {
-  const count = selectedAlertIds.size;
-  const countSpan = document.getElementById("selected-alerts-count");
-  const btnDelete = document.getElementById("btn-delete-selected-alerts");
-  const selectAll = document.getElementById("select-all-alerts");
-
-  if (countSpan) countSpan.textContent = count;
-  if (btnDelete) {
-    if (count > 0) {
-      btnDelete.classList.remove("d-none");
+window.toggleSelectAllAlerts = function(selectAll) {
+  const checkboxes = document.querySelectorAll(".alert-row-cb");
+  checkboxes.forEach(cb => {
+    const id = parseInt(cb.dataset.alertId, 10);
+    cb.checked = selectAll;
+    if (selectAll) {
+      selectedAlertIds.add(id);
     } else {
-      btnDelete.classList.add("d-none");
+      selectedAlertIds.delete(id);
     }
-  }
-  if (selectAll) {
-    const list = currentAlertsList || allAlerts;
-    selectAll.checked = list.length > 0 && selectedAlertIds.size === list.length;
+  });
+  updateAlertSelectionUI(allAlerts);
+};
+
+function updateAlertSelectionUI(alerts) {
+  const count = selectedAlertIds.size;
+  const countEl = document.getElementById("selected-alerts-count");
+  const bulkBtn = document.getElementById("btn-bulk-delete-alerts");
+  const selectAllCb = document.getElementById("select-all-alerts");
+
+  if (countEl) countEl.textContent = count;
+  if (bulkBtn) bulkBtn.disabled = count === 0;
+
+  if (selectAllCb) {
+    const totalVisible = document.querySelectorAll(".alert-row-cb").length;
+    selectAllCb.checked = totalVisible > 0 && count === totalVisible;
+    selectAllCb.indeterminate = count > 0 && count < totalVisible;
   }
 }
 
 window.deleteSingleAlert = async function(alertId) {
   if (!confirm(`Are you sure you want to delete Alert #${alertId}?`)) return;
+
   try {
     await API.delete(`/alerts/${alertId}`);
     selectedAlertIds.delete(alertId);
@@ -144,7 +148,7 @@ window.deleteSingleAlert = async function(alertId) {
   }
 };
 
-window.deleteSelectedAlerts = async function() {
+window.handleBulkDeleteAlerts = async function() {
   const ids = Array.from(selectedAlertIds);
   if (ids.length === 0) return;
   if (!confirm(`Are you sure you want to delete ${ids.length} selected alert(s)?`)) return;
@@ -164,7 +168,7 @@ window.viewAlertDetails = function(alertId) {
   if (!alert) return;
 
   document.getElementById("modal-alert-id").textContent = `#${alert.id}`;
-  document.getElementById("modal-alert-emp").textContent = alert.employee_id;
+  document.getElementById("modal-alert-emp").textContent = alert.employee_name ? `${alert.employee_name} (${alert.employee_id})` : `${alert.employee_id} ${alert.employee_username ? '(' + alert.employee_username + ')' : ''}`;
   document.getElementById("modal-alert-sev").innerHTML = formatSeverityBadge(alert.severity);
   document.getElementById("modal-alert-risk").innerHTML = formatRiskBadge(alert.risk_score);
   document.getElementById("modal-alert-source").textContent = alert.source;

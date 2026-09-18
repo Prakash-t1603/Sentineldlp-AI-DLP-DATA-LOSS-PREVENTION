@@ -8,7 +8,7 @@ let cachedDLPEvents = [];
 let cachedDashboardAlerts = [];
 let selectedDashboardAlertIds = new Set();
 
-function escapeHTML(str) {
+window.escapeHTML = window.escapeHTML || function(str) {
   if (str === null || str === undefined) return "";
   return String(str)
     .replace(/&/g, "&amp;")
@@ -16,7 +16,7 @@ function escapeHTML(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
-}
+};
 
 document.addEventListener("DOMContentLoaded", () => {
   loadDashboardData();
@@ -601,8 +601,8 @@ function renderDashboardAlerts(alerts) {
         </td>
         <td><span class="text-muted small">${formatDate(a.created_at)}</span></td>
         <td>
-          <span class="fw-bold text-info font-monospace">${a.employee_id}</span>
-          <div class="text-muted" style="font-size: 0.72rem;">${a.employee_username || ''}</div>
+          <div class="fw-bold text-white">${escapeHTML(a.employee_name || a.employee_username || 'Employee')}</div>
+          <div class="small text-info font-monospace">${escapeHTML(a.employee_id)}</div>
         </td>
         <td>
           <span class="badge bg-dark border border-secondary text-white font-monospace">${a.alert_type}</span>

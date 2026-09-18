@@ -153,11 +153,12 @@ function applyFilters() {
     // Search Query Filter
     if (search) {
       const matchEmp = (a.employee_id || "").toLowerCase().includes(search);
+      const matchName = (a.employee_name || "").toLowerCase().includes(search);
       const matchUser = (a.employee_username || "").toLowerCase().includes(search);
       const matchType = (a.alert_type || "").toLowerCase().includes(search);
       const matchDesc = (a.description || "").toLowerCase().includes(search);
       const matchFile = (a.filename || "").toLowerCase().includes(search);
-      if (!matchEmp && !matchUser && !matchType && !matchDesc && !matchFile) return false;
+      if (!matchEmp && !matchName && !matchUser && !matchType && !matchDesc && !matchFile) return false;
     }
 
     return true;
@@ -168,10 +169,7 @@ function applyFilters() {
 
 function renderHistoryTable(alerts) {
   const tbody = document.getElementById("hist-table-body");
-  const countLabel = document.getElementById("table-record-count");
   if (!tbody) return;
-
-  if (countLabel) countLabel.textContent = `${alerts.length} records`;
 
   if (alerts.length === 0) {
     tbody.innerHTML = `
@@ -191,8 +189,8 @@ function renderHistoryTable(alerts) {
         <span class="text-muted small">${formatDate(a.created_at)}</span>
       </td>
       <td>
-        <span class="text-cyan fw-bold">${a.employee_id}</span>
-        <div class="small text-muted">${a.employee_username || ''}</div>
+        <div class="fw-bold text-white">${escapeHTML(a.employee_name || a.employee_username || 'Employee')}</div>
+        <div class="small text-cyan font-monospace">${escapeHTML(a.employee_id)}</div>
       </td>
       <td>
         <div class="d-flex flex-column gap-1">
@@ -223,7 +221,7 @@ window.viewHistoryAlertDetails = function(alertId) {
   if (!alert) return;
 
   document.getElementById("modal-hist-id").textContent = `#${alert.id}`;
-  document.getElementById("modal-hist-emp").textContent = `${alert.employee_id} ${alert.employee_username ? '(' + alert.employee_username + ')' : ''}`;
+  document.getElementById("modal-hist-emp").textContent = alert.employee_name ? `${alert.employee_name} (${alert.employee_id})` : `${alert.employee_id} ${alert.employee_username ? '(' + alert.employee_username + ')' : ''}`;
   document.getElementById("modal-hist-source").textContent = alert.source || "FILE_MONITOR";
   document.getElementById("modal-hist-sev").innerHTML = formatSeverityBadge(alert.severity);
   document.getElementById("modal-hist-risk").innerHTML = formatRiskBadge(alert.risk_score);

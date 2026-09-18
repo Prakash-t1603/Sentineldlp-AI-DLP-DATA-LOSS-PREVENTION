@@ -1,3 +1,4 @@
+
 import os
 import sys
 import time
@@ -19,7 +20,11 @@ try:
     from agent.config import (
         SERVER_URL, AGENT_SECRET, EMPLOYEE_ID, USERNAME,
         HOSTNAME, LOCAL_IP, OS_NAME, MONITORED_PATHS,
-        HEARTBEAT_INTERVAL_SECONDS, save_device_credentials
+        HEARTBEAT_INTERVAL_SECONDS, save_device_credentials,
+        save_configured_employee_id, get_configured_employee_id,
+        _is_generated_employee_id, normalize_employee_id,
+        validate_employee_id, normalize_server_url,
+        get_or_generate_stable_device_id
     )
     from agent.logger import get_agent_logger
     from agent.api_client import AgentAPIClient
@@ -36,7 +41,11 @@ except ImportError:
     from config import (
         SERVER_URL, AGENT_SECRET, EMPLOYEE_ID, USERNAME,
         HOSTNAME, LOCAL_IP, OS_NAME, MONITORED_PATHS,
-        HEARTBEAT_INTERVAL_SECONDS, save_device_credentials
+        HEARTBEAT_INTERVAL_SECONDS, save_device_credentials,
+        save_configured_employee_id, get_configured_employee_id,
+        _is_generated_employee_id, normalize_employee_id,
+        validate_employee_id, normalize_server_url,
+        get_or_generate_stable_device_id
     )
     from logger import get_agent_logger
     from api_client import AgentAPIClient
@@ -72,7 +81,30 @@ class SentinelAgent:
         phone_number: Optional[str] = None,
         browser_port: int = 8765
     ):
-        self.employee_id = employee_id or EMPLOYEE_ID
+        # Strict Resolution Precedence:
+        # 1. Explicit parameter (from CLI or programmatic call)
+        # 2. Dynamic configured ID from environment / .employee_id file
+        # 3. Static EMPLOYEE_ID config constant
+        raw_emp = employee_id or get_configured_employee_id() or EMPLOYEE_ID or ""
+        emp_id = normalize_employee_id(raw_emp) or ""
+        if emp_id and not validate_employee_id(emp_id):
+            logger.warning(f"Rejected malformed employee ID '{emp_id}'.")
+            emp_id = ""
+
+        # Reject any generated hostname/UUID pattern
+        if emp_id and _is_generated_employee_id(emp_id):
+            emp_id = ""
+
+        if not emp_id:
+            logger.critical("❌ CRITICAL: No administrator-assigned Employee ID provided!")
+            raise ValueError(
+                "SentinelDLP Agent initialization failed: An administrator-assigned Employee ID "
+                "is required (e.g. pass --employee-id EMP-002). Automatic ID generation is disabled."
+            )
+
+        self.employee_id = emp_id
+        save_configured_employee_id(self.employee_id)
+
         self.username = USERNAME
         self.full_name = full_name or os.environ.get("EMPLOYEE_NAME") or USERNAME
         self.email = email or os.environ.get("EMPLOYEE_EMAIL") or f"{USERNAME}@company.local"
@@ -82,15 +114,22 @@ class SentinelAgent:
         self.hostname = HOSTNAME
         self.ip_address = LOCAL_IP
         self.os_name = OS_NAME
-        self.server_url = (server_url or SERVER_URL).rstrip("/")
+        self.server_url = normalize_server_url(server_url or SERVER_URL)
         self.agent_secret = AGENT_SECRET
         self.is_running = False
 
-        # Initialize Central Server API Client
-        self.api_client = AgentAPIClient(server_url=self.server_url)
-        if device_id:
-            self.api_client.device_id = device_id
+        # Initialize Central Server API Client with authoritative employee_id
+        self.api_client = AgentAPIClient(
+            server_url=self.server_url,
+            employee_id=self.employee_id,
+            device_id=device_id
+        )
         self.device_id = self.api_client.device_id
+
+        # Clean startup banner logging
+        logger.info(f"Central Server URL: {self.server_url}")
+        logger.info(f"Employee ID: {self.employee_id}")
+        logger.info(f"Device ID: {self.device_id}")
 
         # Initialize all 7 Sub-monitors
         self.exfiltration_monitor = ExfiltrationMonitor(self)
@@ -119,6 +158,8 @@ class SentinelAgent:
 
     def register_endpoint(self) -> bool:
         """Register endpoint device with the Central SentinelDLP Server."""
+        assert self.employee_id, "Registration requires a valid non-empty employee_id"
+        assert self.api_client.employee_id == self.employee_id, "API Client employee_id mismatch"
         logger.info(f"Registering endpoint '{self.device_id}' (Employee: {self.employee_id}, Name: {self.full_name}, Dept: {self.department}) with Central Server at {self.server_url}...")
         success = self.api_client.register(
             employee_id=self.employee_id,
@@ -137,6 +178,8 @@ class SentinelAgent:
 
     def send_heartbeat(self):
         """Send live heartbeat ping with full telemetry and flush any queued offline events."""
+        assert self.employee_id, "Heartbeat requires a valid non-empty employee_id"
+        assert self.api_client.employee_id == self.employee_id, "API Client employee_id mismatch"
         metrics = {
             "queue_size": event_queue.size(),
             "active_monitors": list(self.get_active_modules().keys())
@@ -236,7 +279,8 @@ class SentinelAgent:
 
     def send_dlp_event(
         self,
-        channel_or_dict: Union[str, Dict[str, Any]],
+        channel_or_dict: Union[str, Dict[str, Any]] = "USB",
+        channel: Optional[str] = None,
         application: Optional[str] = None,
         file_name: Optional[str] = None,
         destination: Optional[str] = None,
@@ -261,10 +305,11 @@ class SentinelAgent:
             event_payload["employee_id"] = self.employee_id
             event_payload["device_id"] = self.device_id
         else:
+            eff_channel = channel or channel_or_dict or "ENDPOINT"
             event_payload = {
                 "employee_id": self.employee_id,
                 "device_id": self.device_id,
-                "channel": channel_or_dict,
+                "channel": eff_channel,
                 "application": application or "Workstation App",
                 "file_name": file_name or "unknown",
                 "destination": destination,
@@ -290,8 +335,10 @@ class SentinelAgent:
         logger.info("==================================================")
         logger.info(" 🛡️ Starting SentinelDLP Enterprise Endpoint Protection Agent")
         logger.info(f" Central Server URL: {self.server_url}")
-        logger.info(f" Hostname: {self.hostname} | Device ID: {self.device_id}")
-        logger.info(f" Employee ID: {self.employee_id} | User: {self.username} | IP: {self.ip_address}")
+        logger.info(f" Employee ID: {self.employee_id}")
+        logger.info(f" Device ID: {self.device_id}")
+        logger.info(f" Hostname: {self.hostname}")
+        logger.info(f" User: {self.username} | IP: {self.ip_address} | OS: {self.os_name}")
         logger.info(" Active Watch Vectors: USB Storage, Web Browser Interception, Clipboard, File Watchdog, Processes, Email, System Events")
         logger.info("==================================================")
 
@@ -366,20 +413,43 @@ def run_agent(
     browser_port: int = 8765
 ):
     parser = argparse.ArgumentParser(description="SentinelDLP Enterprise Endpoint Agent")
-    parser.add_argument("--server-url", default=None, help="Central DLP Server URL (e.g. http://127.0.0.1:8000)")
-    parser.add_argument("--employee-id", default=None, help="Assigned Employee ID (e.g. EMP-001)")
-    parser.add_argument("--device-id", default=None, help="Custom Device ID")
+    parser.add_argument("--server-url", "--server", dest="server_url", default=None, help="Central DLP Server URL (e.g. http://127.0.0.1:8000)")
+    parser.add_argument("--employee-id", "--employee_id", dest="employee_id", default=None, help="Assigned Employee ID (e.g. EMP-WIN-01)")
+    parser.add_argument("--device-id", "--device_id", dest="device_id", default=None, help="Custom Device ID")
     parser.add_argument("--name", "--full-name", dest="full_name", default=None, help="Employee Full Name")
     parser.add_argument("--email", default=None, help="Employee Corporate Email")
     parser.add_argument("--dept", "--department", dest="department", default=None, help="Department Name")
     parser.add_argument("--desig", "--designation", dest="designation", default=None, help="Job Designation / Role")
-    parser.add_argument("--phone", default=None, help="Contact Phone Number")
+    parser.add_argument("--phone", "--phone-number", dest="phone", default=None, help="Contact Phone Number")
     parser.add_argument("--browser-port", type=int, default=8765, help="Local Browser Extension Receiver Port")
     parser.add_argument("-i", "--interactive", action="store_true", help="Interactive terminal configuration prompt")
     args, _ = parser.parse_known_args()
 
-    s_url = server_url or args.server_url or os.environ.get("DLP_SERVER_URL") or os.environ.get("SERVER_URL") or SERVER_URL
-    e_id = employee_id or args.employee_id or os.environ.get("EMPLOYEE_ID") or EMPLOYEE_ID
+    raw_server = server_url or args.server_url or os.environ.get("DLP_SERVER_URL") or os.environ.get("SERVER_URL") or SERVER_URL
+    s_url = normalize_server_url(raw_server)
+    
+    # Deterministic Priority:
+    # 1. Explicit CLI argument (--employee-id / --employee_id)
+    # 2. Explicit function parameter (employee_id)
+    # 3. Explicit configured EMPLOYEE_ID from environment / .env / .employee_id
+    cli_emp = normalize_employee_id(args.employee_id) if args.employee_id else ""
+    func_emp = normalize_employee_id(employee_id) if employee_id else ""
+    env_emp = normalize_employee_id(os.environ.get("SENTINEL_EMPLOYEE_ID") or os.environ.get("EMPLOYEE_ID") or os.environ.get("DLP_EMPLOYEE_ID") or get_configured_employee_id() or EMPLOYEE_ID or "") or ""
+
+    resolved_source = "CLI" if cli_emp else ("Function Parameter" if func_emp else "Configured Environment / .employee_id")
+    e_id = cli_emp or func_emp or env_emp
+
+    if e_id and not validate_employee_id(e_id):
+        logger.warning(f"Rejected malformed employee ID '{e_id}'.")
+        e_id = ""
+
+    if e_id and _is_generated_employee_id(e_id):
+        logger.warning(f"Rejected invalid/generated employee ID '{e_id}'.")
+        e_id = ""
+
+    if e_id:
+        logger.info(f"Employee ID resolved to '{e_id}' from {resolved_source}.")
+
     d_id = device_id or args.device_id
     f_name = full_name or args.full_name or os.environ.get("EMPLOYEE_NAME") or os.environ.get("FULL_NAME") or USERNAME
     e_mail = email or args.email or os.environ.get("EMPLOYEE_EMAIL") or os.environ.get("EMAIL") or f"{USERNAME}@company.local"
@@ -393,9 +463,9 @@ def run_agent(
         print("=" * 65)
         try:
             val = input(f"Central DLP Server URL [{s_url}]: ").strip()
-            if val: s_url = val
+            if val: s_url = normalize_server_url(val)
             val = input(f"Employee ID [{e_id}]: ").strip()
-            if val: e_id = val
+            if val: e_id = normalize_employee_id(val)
             val = input(f"Full Name [{f_name}]: ").strip()
             if val: f_name = val
             val = input(f"Email ID [{e_mail}]: ").strip()
@@ -408,6 +478,13 @@ def run_agent(
         except (KeyboardInterrupt, EOFError):
             print("\nSetup aborted.")
             sys.exit(0)
+
+    if not e_id:
+        print("❌ FATAL: Employee ID is not configured.")
+        print("   Use --employee-id EMP-002 or configure EMPLOYEE_ID.")
+        print("   Usage: python agent.py --server-url <SERVER_URL> --employee-id <EMPLOYEE_ID>")
+        print("   Example: python agent.py --server-url http://172.24.143.236:8000 --employee-id EMP-002")
+        sys.exit(1)
 
     agent = SentinelAgent(
         server_url=s_url,

@@ -19,6 +19,33 @@ def client():
 
 def test_agent_registration_success(client):
     """Verify endpoint agent registration, token issuance, and device persistence."""
+    db = SessionLocal()
+    try:
+        emp = db.query(Employee).filter(Employee.employee_id == "EMP-TEST-99").first()
+        if not emp:
+            now = datetime.now(timezone.utc)
+            emp = Employee(
+                employee_id="EMP-TEST-99",
+                username="test_user_99",
+                full_name="Test User 99",
+                email="test99@sentineldlp.io",
+                department="Engineering",
+                designation="Software Engineer",
+                hostname="TEST-WORKSTATION-99",
+                ip_address="192.168.10.99",
+                operating_system="Ubuntu 22.04 LTS",
+                status="ONLINE",
+                last_seen=now,
+                created_at=now,
+                updated_at=now,
+                active=True,
+                risk_score=0.0
+            )
+            db.add(emp)
+            db.commit()
+    finally:
+        db.close()
+
     payload = {
         "hostname": "TEST-WORKSTATION-99",
         "operating_system": "Ubuntu 22.04 LTS",
@@ -41,6 +68,33 @@ def test_agent_registration_success(client):
 
 def test_agent_heartbeat_processing(client):
     """Verify heartbeat pings update last_seen and return acknowledged response."""
+    db = SessionLocal()
+    try:
+        emp = db.query(Employee).filter(Employee.employee_id == "EMP-HB-100").first()
+        if not emp:
+            now = datetime.now(timezone.utc)
+            emp = Employee(
+                employee_id="EMP-HB-100",
+                username="test_user_hb100",
+                full_name="Test User HB100",
+                email="hb100@sentineldlp.io",
+                department="SOC",
+                designation="SOC Analyst",
+                hostname="TEST-HB-WS",
+                ip_address="192.168.10.100",
+                operating_system="Windows 11",
+                status="ONLINE",
+                last_seen=now,
+                created_at=now,
+                updated_at=now,
+                active=True,
+                risk_score=0.0
+            )
+            db.add(emp)
+            db.commit()
+    finally:
+        db.close()
+
     # 1. Register device
     reg_payload = {
         "hostname": "TEST-HB-WS",

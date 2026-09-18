@@ -48,14 +48,19 @@ class FleetMonitorService:
         activity_type: str,
         process_name: Optional[str] = "SentinelAgent",
         destination: Optional[str] = None
-    ) -> ActivityLog:
+    ) -> Optional[ActivityLog]:
         """
         Record operational lifecycle audit event (AGENT_STARTED, MONITORING_STARTED, AGENT_STOPPED, etc.)
         without creating false security alerts or incidents.
         """
+        emp = db.query(Employee).filter(Employee.employee_id == employee_id).first()
+        if not emp:
+            logger.warning(f"Skipping operational event [{activity_type}]: Employee '{employee_id}' not found in database.")
+            return None
+
         now = datetime.now(timezone.utc)
         log = ActivityLog(
-            employee_id=employee_id,
+            employee_id=emp.employee_id,
             activity_type=activity_type,
             filepath=None,
             process_name=process_name,
@@ -66,7 +71,7 @@ class FleetMonitorService:
         db.add(log)
         db.commit()
         db.refresh(log)
-        logger.info(f"Recorded operational event [{activity_type}] for employee {employee_id}")
+        logger.info(f"Recorded operational event [{activity_type}] for employee {emp.employee_id}")
         return log
 
     def evaluate_employee_status(self, employee: Employee, db: Session, current_time: Optional[datetime] = None) -> str:

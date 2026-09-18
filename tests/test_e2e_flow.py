@@ -37,6 +37,18 @@ def test_full_detection_and_incident_flow():
 
     # 5. Database Alert and Auto-Incident Creation
     db = SessionLocal()
+    emp = db.query(Employee).filter(Employee.employee_id == "EMP-E2E-TEST").first()
+    if not emp:
+        emp = Employee(
+            employee_id="EMP-E2E-TEST",
+            username="e2e_tester",
+            full_name="E2E Tester",
+            status="ONLINE",
+            risk_score=0.0
+        )
+        db.add(emp)
+        db.commit()
+
     alert = alert_service.process_and_create_alert(
         db=db,
         employee_id="EMP-E2E-TEST",

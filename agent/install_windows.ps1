@@ -3,8 +3,18 @@
 # ==============================================================================
 param (
     [string]$ServerUrl = "http://127.0.0.1:8000",
-    [string]$EmployeeId = "EMP-$env:COMPUTERNAME"
+    [string]$EmployeeId
 )
+
+if (-not $EmployeeId -or [string]::IsNullOrWhiteSpace($EmployeeId)) {
+    Write-Host "=================================================================" -ForegroundColor Red
+    Write-Host " ❌ ERROR: -EmployeeId is required!" -ForegroundColor Red
+    Write-Host " Employee IDs must be provisioned by the Central Admin/SOC." -ForegroundColor Red
+    Write-Host " Example:" -ForegroundColor Yellow
+    Write-Host "   .\install_windows.ps1 -ServerUrl `"http://172.24.143.236:8000`" -EmployeeId `"EMP-WIN-01`"" -ForegroundColor Yellow
+    Write-Host "=================================================================" -ForegroundColor Red
+    Exit 1
+}
 
 Write-Host "=================================================================" -ForegroundColor Cyan
 Write-Host "   SentinelDLP Endpoint Protection Agent - Windows Installer    " -ForegroundColor Cyan
@@ -26,15 +36,18 @@ Write-Host "[*] Installing endpoint agent dependencies..." -ForegroundColor Yell
 & "$AgentDir\venv\Scripts\pip.exe" install --upgrade pip -q
 & "$AgentDir\venv\Scripts\pip.exe" install -r "$AgentDir\requirements.txt" -q
 
-# 2. Save local environment configuration
-@"
+# 2. Save local environment configuration (Explicit UTF-8 without BOM)
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$EnvContent = @"
 DLP_SERVER_URL=$ServerUrl
 EMPLOYEE_ID=$EmployeeId
 AGENT_SECRET=sentinel_agent_telemetry_secure_token_key_9981
 PYTHONPATH=$AgentDir
-"@ | Out-File -FilePath "$AgentDir\.env" -Encoding utf8
+"@
+[System.IO.File]::WriteAllText("$AgentDir\.env", $EnvContent, $Utf8NoBom)
+[System.IO.File]::WriteAllText("$AgentDir\.employee_id", $EmployeeId.Trim(), $Utf8NoBom)
 
-Write-Host "[+] Local environment configuration saved to $AgentDir\.env" -ForegroundColor Green
+Write-Host "[+] Local environment configuration saved to $AgentDir\.env and $AgentDir\.employee_id (UTF-8 No-BOM)" -ForegroundColor Green
 
 # 3. Configure Windows Auto-Startup via Task Scheduler (Runs automatically at system startup)
 $TaskName = "SentinelDLPEndpointAgent"

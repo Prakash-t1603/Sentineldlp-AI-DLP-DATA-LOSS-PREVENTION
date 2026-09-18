@@ -150,6 +150,9 @@ class ClipboardMonitor:
                 samples.append(s)
         sample_str = f" [Samples: {', '.join(samples[:3])}]" if samples else ""
 
+        emp_name = getattr(self.agent, "full_name", None) or getattr(self.agent, "username", "Employee")
+        emp_id = getattr(self.agent, "employee_id", "EMP-UNKNOWN")
+
         # Determine alert type & severity based on exfiltration vector
         if channel_info:
             category = channel_info["category"]
@@ -161,7 +164,7 @@ class ClipboardMonitor:
                 risk_score = max(95.0, max_score)
                 desc = (
                     f"🚨 REAL-TIME EXFILTRATION DETECTED: Sensitive data [{entity_summary}] copied "
-                    f"to clipboard while {channel_name} was active ('{win_title}' / {proc_name}). "
+                    f"to clipboard by Employee '{emp_name}' ({emp_id}) while {channel_name} was active ('{win_title}' / {proc_name}). "
                     f"Threat Vector: Instant Messaging / WhatsApp Exfiltration.{sample_str}"
                 )
             elif category == "WEB_STORAGE":
@@ -170,7 +173,7 @@ class ClipboardMonitor:
                 risk_score = max(96.0, max_score)
                 desc = (
                     f"🚨 REAL-TIME EXFILTRATION DETECTED: Sensitive data [{entity_summary}] copied "
-                    f"to clipboard while Web Cloud Storage was active ('{win_title}' / {proc_name}). "
+                    f"to clipboard by Employee '{emp_name}' ({emp_id}) while Web Cloud Storage was active ('{win_title}' / {proc_name}). "
                     f"Threat Vector: Cloud Storage Exfiltration.{sample_str}"
                 )
             elif category == "EMAIL":
@@ -179,7 +182,7 @@ class ClipboardMonitor:
                 risk_score = max(92.0, max_score)
                 desc = (
                     f"🚨 REAL-TIME EXFILTRATION DETECTED: Sensitive data [{entity_summary}] copied "
-                    f"to clipboard while Email application/tab was active ('{win_title}' / {proc_name}). "
+                    f"to clipboard by Employee '{emp_name}' ({emp_id}) while Email application/tab was active ('{win_title}' / {proc_name}). "
                     f"Threat Vector: Email Exfiltration.{sample_str}"
                 )
             else:
@@ -188,7 +191,7 @@ class ClipboardMonitor:
                 risk_score = max(channel_info.get("base_risk", 90.0), max_score)
                 desc = (
                     f"🚨 REAL-TIME EXFILTRATION DETECTED: Sensitive data [{entity_summary}] copied "
-                    f"while {channel_name} was active ('{win_title}' / {proc_name}).{sample_str}"
+                    f"by Employee '{emp_name}' ({emp_id}) while {channel_name} was active ('{win_title}' / {proc_name}).{sample_str}"
                 )
         else:
             # General clipboard leak without active exfiltration app
@@ -197,7 +200,7 @@ class ClipboardMonitor:
             risk_score = max(75.0, max_score)
             desc = (
                 f"⚠️ SENSITIVE CLIPBOARD ACTIVITY: Sensitive data [{entity_summary}] ({classification}) "
-                f"copied to system clipboard from active window '{win_title}' ({proc_name}).{sample_str}"
+                f"copied to system clipboard by Employee '{emp_name}' ({emp_id}) from active window '{win_title}' ({proc_name}).{sample_str}"
             )
 
         logger.warning(f"DLP CLIPBOARD DETECTION: {alert_type} | Risk: {risk_score} | App: {win_title}")

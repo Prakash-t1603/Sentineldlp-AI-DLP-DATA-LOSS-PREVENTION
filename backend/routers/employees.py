@@ -203,6 +203,7 @@ def update_employee(
     return _build_employee_response(employee, db, now)
 
 @router.get("/{employee_id}", response_model=EmployeeDetailResponse)
+@router.get("/{employee_id}/profile", response_model=EmployeeDetailResponse)
 def get_employee_detail(
     employee_id: str,
     db: Session = Depends(get_db),

@@ -90,13 +90,12 @@ def scan_file_on_disk(
 
     # 4. Resolve Employee before inserting FileRecord (Prevents SQLite Foreign Key error)
     emp = db.query(Employee).filter(Employee.employee_id == scan_req.employee_id).first()
-    effective_emp_id = scan_req.employee_id
     if not emp:
-        first_emp = db.query(Employee).filter(Employee.active == True).first()
-        if first_emp:
-            effective_emp_id = first_emp.employee_id
-        else:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Employee '{scan_req.employee_id}' not registered.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Employee '{scan_req.employee_id}' is not registered."
+        )
+    effective_emp_id = emp.employee_id
 
     # 5. Upsert FileRecord in Database
     file_record = db.query(FileRecord).filter(
@@ -132,8 +131,9 @@ def scan_file_on_disk(
     if risk_score >= 30.0 or classification in ["CONFIDENTIAL", "HIGHLY_CONFIDENTIAL"]:
         doc_type = clf_result.get("document_type")
         doc_prefix = f"Image identified as '{doc_type}' ('{filepath.name}')" if doc_type else f"File '{filepath.name}'"
+        emp_name = emp.full_name or emp.username or effective_emp_id
         desc = (
-            f"{doc_prefix} scanned on endpoint '{effective_emp_id}'. "
+            f"🚨 Sensitive file scanned on endpoint for Employee '{emp_name}' ({effective_emp_id}): {doc_prefix}. "
             f"Classification: {classification} (Score: {sensitivity_score}/100, Confidence: {int(confidence*100)}%). "
             f"Detected {len(detected_entities)} sensitive entity types."
         )
