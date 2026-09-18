@@ -1,23 +1,13 @@
 // SentinelDLP Browser Extension Service Worker
 const AGENT_ENDPOINTS = [
-  "http://172.24.143.236:8765/browser-event",
-  "http://172.24.143.236:8766/browser-event",
-  "http://172.24.143.236:8767/browser-event",
-  "http://172.24.143.236:8000/api/dlp/browser-event",
   "http://127.0.0.1:8765/browser-event",
   "http://127.0.0.1:8766/browser-event",
-  "http://127.0.0.1:8767/browser-event",
-  "http://127.0.0.1:8000/api/dlp/browser-event"
+  "http://127.0.0.1:8767/browser-event"
 ];
 const HEALTH_ENDPOINTS = [
-  "http://172.24.143.236:8765/health",
-  "http://172.24.143.236:8766/health",
-  "http://172.24.143.236:8767/health",
-  "http://172.24.143.236:8000/health",
   "http://127.0.0.1:8765/health",
   "http://127.0.0.1:8766/health",
-  "http://127.0.0.1:8767/health",
-  "http://127.0.0.1:8000/health"
+  "http://127.0.0.1:8767/health"
 ];
 
 console.log("[SentinelDLP Background] Enterprise Browser Agent Initialized.");

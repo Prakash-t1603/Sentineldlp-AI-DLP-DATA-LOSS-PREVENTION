@@ -3,7 +3,7 @@
 [![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/License-Proprietary-red.svg)]()
-[![Test Suite](https://img.shields.io/badge/Tests-117%2F117%20Passing%20(100%25)-brightgreen.svg)]()
+[![Test Suite](https://img.shields.io/badge/Tests-150%2F150%20Passing%20(100%25)-brightgreen.svg)]()
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg)]()
 
 **SentinelDLP AI** is an enterprise-grade endpoint cybersecurity, Data Loss Prevention (DLP), and User & Entity Behavior Analytics (UEBA) platform. It safeguards proprietary source code, credentials, PII, financial records, and confidential assets across workstation filesystems, removable USB media, web browser uploads (Google Drive, Dropbox, WhatsApp Web), email attachments, clipboard transfers, and background processes in real time.
@@ -648,23 +648,25 @@ Once the central server is running (`http://127.0.0.1:8000` or `http://<YOUR_IP>
 To verify that your installation is functioning with 100% test coverage:
 
 ```bash
-# Execute the full test battery
+# Execute the full test battery (150 tests across 18 modules)
 pytest tests/ -v
 ```
 
 Expected output:
 ```text
-============================= 117 passed in 9.30s ==============================
+============================= 150 passed in 12.16s =============================
 ```
 
-All 117 automated tests validate:
+All 150 automated tests validate:
 - Master Employee Directory lifecycle (clean `OFFLINE` initialization, zero ghost records).
-- Hardware Device Telemetry binding and token-authenticated heartbeats.
+- Hardware Device Telemetry binding and token-authenticated heartbeats (`X-Device-Token`, `X-Device-Id`).
+- Multi-format deep content extraction (XLSX, DOCX, CSV, JSON, TXT, PDF, OCR).
 - Real-time OCR and scanned PDF fallback extraction.
 - Deterministic Luhn, Verhoeff, and Shannon entropy pattern recognition.
+- Strict multi-endpoint identity attribution, device isolation, and fast-path hash caching.
 - Browser extension payload ingestion and policy action execution.
 - UEBA rolling baseline calculations and velocity anomaly thresholds.
-- Correlated security threat alert and incident generation.
+- Correlated security threat alert and automated incident generation.
 
 ---
 
@@ -673,4 +675,5 @@ All 117 automated tests validate:
 - **Author**: Prakash T ([@Prakash-t1603](https://github.com/Prakash-t1603))
 - **Repository**: [https://github.com/Prakash-t1603/Sentineldlp-AI-DLP-DATA-LOSS-PREVENTION](https://github.com/Prakash-t1603/Sentineldlp-AI-DLP-DATA-LOSS-PREVENTION)
 - **Project**: SentinelDLP AI Enterprise Data Loss Prevention & Threat Intelligence Platform
-- **Release Version**: 2.5.0
+- **Release Version**: 3.0.0
+

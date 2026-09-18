@@ -58,9 +58,11 @@ htmlcov/
 *.swo
 .DS_Store
 Thumbs.db
-.file/
 .employee_id
 agent/.employee_id
 agent/.device_config.json
 .device_config.json
 
+# Archives
+*.zip
+*.tar.gz
